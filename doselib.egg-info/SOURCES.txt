@@ -1,0 +1,7 @@
+setup.py
+doselib/__init__.py
+doselib/functions.py
+doselib.egg-info/PKG-INFO
+doselib.egg-info/SOURCES.txt
+doselib.egg-info/dependency_links.txt
+doselib.egg-info/top_level.txt
