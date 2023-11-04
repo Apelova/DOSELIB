@@ -1,6 +1,6 @@
 setup.py
 doselib/__init__.py
-doselib/functions.py
+doselib/read.py
 doselib.egg-info/PKG-INFO
 doselib.egg-info/SOURCES.txt
 doselib.egg-info/dependency_links.txt
