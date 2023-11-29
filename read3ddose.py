@@ -27,11 +27,13 @@ path = "C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_dosxyz.3ddose
 
 class xyz_array_from_dict:
     def __init__(self, array):
-        self.x = array["x"]
-        self.y = array["y"]
-        self.z = array["z"]
+        self.x = np.array(array["x"])
+        self.y = np.array(array["y"])
+        self.z = np.array(array["z"])
 
 class dose3d:
+    """
+    """
     def __init__(self, path):
         self.origin = path
         self.__read_3ddose_file() #--- load data
@@ -81,20 +83,39 @@ class dose3d:
         return matrix
   
     def dicts_to_xyz_arrays(self):
-        for attr in self.__dict__:
-            print(attr)
-        
-        
-        #self.voxel_in_axis = xyz_array_from_dict(self.voxel_in_axis)
-        #self.boundaries = xyz_array_from_dict(self.boundaries)
-        #self.position = xyz_array_from_dict(self.position)
-        #print(self.boundaries.x)
-  
+        self.voxel_in_axis = xyz_array_from_dict(self.voxel_in_axis)
+        self.boundaries = xyz_array_from_dict(self.boundaries)
+        self.position = xyz_array_from_dict(self.position)
 
-dose = dose3d(x_path)
-#print(dose.origin)
-#print(dose.position.x)
+    def find_closest_index(self, array, value):
+        """assumes the array is ordered !!!"""
+        return abs(array - value).tolist().index( min(abs(array - value)))
+          
+    #TODO!
+    def get_pdd(self, X=0.1, Y=0):
+        x_index = self.find_closest_index(self.position.x, X)
+        #y_index = self.find_closest_index(self.position.y, Y)
+        #print(X, "  found at  ", x_index, " because:")
+        #for i in range(len(self.position.x)):
+        #    print(i, self.position.x[i])
+        
+        pass
+        
+    #TODO!
+    def get_profile(self):
+        pass
 
+    
+
+
+
+
+
+        
+
+dose = dose3d(path)
+
+dose.get_pdd()
 
 
 
