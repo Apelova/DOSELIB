@@ -2,12 +2,14 @@
 @author: Apelova 
 
 Module Task: get Data from .agr-File as output from statdose.
+Please Note that using the Module is not necessary since read_3ddose was introduced as a substitute for statdose !
 """
 import matplotlib.pyplot as plt
 import pandas as pd
 
 
-def get_data_from_agr(path, norm_dose = True):
+def dose_agr(path, norm_dose = False):
+    print("Please Note that using the Module is not necessary since read_3ddose was introduced as a substitute for statdose !")
     if not path.endswith(".agr"):
         raise ValueError("Can't extract Data from this File. This routine can only read .agr Files from statdose.")
     
@@ -74,28 +76,29 @@ def get_data_from_agr(path, norm_dose = True):
     return data_dict
 
 
-if __name__== "__main__":
-    #--- Example 1 ()
-    data = get_data_from_agr("EGSnrc/EGSnrc/egs_home/dosxyznrc/tdk_16MVp.agr")            
-    for meas in data:
-        plt.plot(data[meas].position, data[meas].dose, label=meas)
-    plt.legend(loc="upper right")
-    plt.show()
-    #%%
-    #--- Example 2
-    data = get_data_from_agr("EGSnrc/EGSnrc/egs_home/dosxyznrc/tdk_16MVp_quer.agr")
-    for meas in data:
-        plt.plot(data[meas].position, data[meas].dose, label=meas)
-    plt.legend(loc="upper right")
-    plt.show()    
-    #%%
-    #--- Example 3
-    data = get_data_from_agr("EGSnrc/EGSnrc/egs_home/dosxyznrc/pdd_z_diff_start.agr")            
-    for meas in data:
-        plt.plot(data[meas].position, data[meas].dose, label=meas)
-    plt.legend(loc="upper right")
-    plt.show()
-    
+if __name__== "__main__":    
+# =============================================================================
+#     #--- Example 1 ()
+#     data = get_data_from_agr("EGSnrc/EGSnrc/egs_home/dosxyznrc/tdk_16MVp.agr")            
+#     for meas in data:
+#         plt.plot(data[meas].position, data[meas].dose, label=meas)
+#     plt.legend(loc="upper right")
+#     plt.show()
+#     #%%
+#     #--- Example 2
+#     data = get_data_from_agr("EGSnrc/EGSnrc/egs_home/dosxyznrc/tdk_16MVp_quer.agr")
+#     for meas in data:
+#         plt.plot(data[meas].position, data[meas].dose, label=meas)
+#     plt.legend(loc="upper right")
+#     plt.show()    
+#     #%%
+#     #--- Example 3
+#     data = get_data_from_agr("EGSnrc/EGSnrc/egs_home/dosxyznrc/pdd_z_diff_start.agr")            
+#     for meas in data:
+#         plt.plot(data[meas].position, data[meas].dose, label=meas)
+#     plt.legend(loc="upper right")
+#     plt.show()  
+# =============================================================================
 
 
     

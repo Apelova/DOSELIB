@@ -1,22 +1,16 @@
 # Doselib - A library for processing EGSnrc's Monte-Carlo Simulation output 
 
-For now this repository is just a remote storage for some code i wrote.
-It will soon be ready to be used by others.
-
-# 1. Test if required packages are installed:
-	~ pip install wheel
-	~ pip install setuptools
-	~ pip install twine
-
-# 2. Compile the build distribution (.whl) only neccessary if the file in /dist is corrupted 
- 	~ python setup.py bdist_wheel
-
-# 3. Install the package through the -whl-File by running:
+# 1. Install the package through the -whl-File by running:
 	~ pip install /path/to/wheelfile.whl
 
-# 4. Import the package by using 
-	import doselib.functions as dl
+# 2. Import the package by using 
+	import doselib
 	
-# 5. Available methods are:
- 	- get_data_from_agr, which reads the data ploted in the statdose method from the corresponding .agr-File 
+# 3. Available methods are:
+ 	- dose_3d (equivalent to statdose)
+		- a tool which reads 3ddose files and enables quick and simple extraction of doseprofiles (x/y-profile and pdd) and slices (parallel to xy, xz or yz)
 
+	- dose_mcc 
+	 - a class with routines to read the .mcc files output from Mephysto
+
+# 4. Examples will be uploaded soon.

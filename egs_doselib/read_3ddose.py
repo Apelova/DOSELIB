@@ -5,7 +5,10 @@ Module Task: get Data from .agr-File as output from statdose.
     
 TODO
 - add Documentation
-- compare to statdose results from get_agr
+- add console output to show where the voxel lays for a certain input value 
+- dose to csv !!!
+- type testing in every function
+- add example data to the repo
 """
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -17,20 +20,42 @@ class xyz_array_from_dict:
         self.y = np.array(array["y"])
         self.z = np.array(array["z"])
 
-class dose3d:
+class dose_3d:
     """
     """
-    def __init__(self, path):
-        self.origin = path
+    def __init__(self, PATH, INFO=False):
+        self.origin = PATH
         #--- load data
         self.__read_3ddose_file() 
         #--- set voxel position to voxelcenter
         self.__replace_boundary_with_voxel_center() 
         #--- change datastructure
-        self.dicts_to_xyz_arrays()
+        self.__dicts_to_xyz_arrays()
         #--- on read initialize pdd @(0,0) and profiles along x and y at z=5cm
-        self.set_profiles()
-
+        self.__set_profiles()
+        #--- output information on read
+        if INFO:
+            print(self)
+        
+    def __str__(self):
+        return f"""
+##############################################################################
+#  Successfully read the 3ddose-File and initialized the default PDD and profiles. \n#
+#  Voxel Boundaries in X-direction:
+   {self.boundaries.x.tolist()}
+#
+#  Voxel Boundaries in Y-direction:
+   {self.boundaries.y.tolist()}
+#
+#  Voxel Boundaries in Z-direction:
+   {self.boundaries.z.tolist()}
+#            
+#  You can access the Dose-values quickly through OBJECT_NAME.pdd, OBJECT_NAME.x_profile, OBJECT_NAME.y_profile.
+#  Alternatnatively you can use set_profiles or set_pdd to change the position of each Doseprofile or use get_plane to get a 2D-np.array representing a plane.
+##############################################################################
+"""
+            
+        
         
     #__ makes this function inaccessible to the user -> sets it as private
     def __read_3ddose_file(self):        
@@ -46,11 +71,11 @@ class dose3d:
             for axis in self.boundaries:
                 self.boundaries[axis] =[float(x) for x in file.readline().split(" ") if x not in ["", "\n"] ]
             #--- read dose and error 
-            self.dose_matrix = self.__matrix_from_array(np.array([float(x) for x in file.readline().split()]))
+            self.dose_array = np.array([float(x) for x in file.readline().split()])
+            self.dose_matrix = self.__matrix_from_array(self.dose_array)
             self.error_matrix =  self.__matrix_from_array(np.array([float(x) for x in file.readline().split()]))
 
     def __replace_boundary_with_voxel_center(self):
-        self.dose_array = np.array([])
         self.position = {axis: [sum(self.boundaries[axis][i:i+2])/2 for i in range(len(self.boundaries[axis])-1)] for axis in self.boundaries}
         
     def __matrix_from_array(self,data_array_3d):
@@ -73,34 +98,38 @@ class dose3d:
         del matrix_array, plane_array, plane #in case garbage collector doesnt 
         return matrix
   
-    def dicts_to_xyz_arrays(self):
+    def __dicts_to_xyz_arrays(self):
         self.voxel_in_axis = xyz_array_from_dict(self.voxel_in_axis)
         self.boundaries = xyz_array_from_dict(self.boundaries)
         self.position = xyz_array_from_dict(self.position)
 
     def find_closest_index(self, array, value):
-        return abs(array - value).tolist().index( min(abs(array - value)))
+        idx = abs(array - value).tolist().index( min(abs(array - value)) )
+        if np.sum( abs(array-value) == min(abs(array - value)))> 1:
+            print(f"WARNING --- multiple voxels in same distance to input {value}. Selected Voxel with center at {array[idx]}")
+        return idx 
           
     #--- setter functions
-    def set_profiles(self):
+    def __set_profiles(self):
         self.set_pdd()
         self.set_x_profile()
         self.set_y_profile()
         
-    def set_pdd(self, X=0.8, Y=0):
+    def set_pdd(self, X=0, Y=0):
         x_index = self.find_closest_index(self.position.x, X)
         y_index = self.find_closest_index(self.position.y, Y)
         self.pdd = self.dose_matrix[:, y_index, x_index]
         self.pdd_error = self.error_matrix[:, y_index, x_index]
             
-    def set_x_profile(self, Z=5, Y=0):
+    #TODO! --- test
+    def set_x_profile(self, Z=0, Y=0):
         """ default depth for doseprofile is 5cm"""
         y_index = self.find_closest_index(self.position.y, Y)
         z_index = self.find_closest_index(self.position.z, Z)
         self.x_profile = self.dose_matrix[z_index, y_index, :]
         self.x_profile_error = self.error_matrix[z_index, y_index, :]
         
-    def set_y_profile(self, Z=5, X=0):
+    def set_y_profile(self, Z=0, X=0):
         """ default depth for doseprofile is 5cm"""
         x_index = self.find_closest_index(self.position.x, X)
         z_index = self.find_closest_index(self.position.z, Z)
@@ -153,47 +182,58 @@ class dose3d:
            return self.boundaries.z[0] < POSITION_ON_AXIS < self.boundaries.z[-1]
         
         
-        
-
-
-path = "/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc/16MVp_h2o_phantom_beamsource_example.3ddose"
-path = "C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_dosxyz.3ddose"
-dose = dose3d(path)#
-
-dose.get_plane("z", 10)
-
-
-
-
-
-# %%
-plt.imshow(dose.get_plane("Z", 0))
-plt.show()
-plt.imshow(dose.get_plane("x", 5))
-plt.show()
-
-
-# %%
-# TODO ! use statdose linux only feature of EGS to validate this code !
-plt.plot(dose.position.z, dose.pdd)
-plt.show()
-
-plt.plot(dose.position.x, dose.x_profile)
-plt.plot(dose.position.y, dose.y_profile)
-plt.show()
-
-# %%
-import doselib.read as dl
-statdose = dl.get_data_from_agr("/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc//pdd_test.agr")
+   
+if __name__ == "__main__":
+    #path = "/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc/16MVp_h2o_phantom_beamsource_example.3ddose"
+    #path = "C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_dosxyz.3ddose"
+    #dose = dose3d(path)
+    
+    #plt.imshow(dose.get_plane("z", 10))
+    #plt.imshow(dose.get_plane("y", 10))
 
 
 
 
+# =============================================================================
+# 
+# # %%
+# path = "/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc/16MVp_h2o_phantom_beamsource_example.3ddose"
+# path = "C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_dosxyz.3ddose"
+# dose = dose3d(path)#
+# dose.get_plane("z", 10)
+# 
+# 
+# 
+# 
+# 
+# # %%
+# plt.imshow(dose.get_plane("Z", 0))
+# plt.show()
+# plt.imshow(dose.get_plane("x", 5))
+# plt.show()
+# 
+# 
+# # %%
+# # TODO ! use statdose linux only feature of EGS to validate this code !
+# plt.plot(dose.position.z, dose.pdd)
+# plt.show()
+# 
+# plt.plot(dose.position.x, dose.x_profile)
+# plt.plot(dose.position.y, dose.y_profile)
+# plt.show()
+# 
+# # %%
+# import doselib.read as dl
+# statdose = dl.get_data_from_agr("/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc//pdd_test.agr")
+# 
+# 
+# =============================================================================
 
 
 
 
-commit 67c66dc
+
+
 
 
 
