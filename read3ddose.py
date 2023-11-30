@@ -1,29 +1,12 @@
-# -*- coding: utf-8 -*-
 """
-Spyder Editor
-Aufgaben:
-    1. lesen der 3ddose files die aus chamber kommen 
-    2. lesen der allgemeinen 3ddose files
-    3. zwei funktionen schreiben
-        - get_1d_dose
-        - get_3_ddose
+    TODO
+        - add Documentation
+        - compare to statdose results from get_agr
 """
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-
-x_path = "Desktop/Master/Data_for_Python/3ddose/EX16MeVp_dose_x_profile.3ddose"
-y_path = "Desktop/Master/Data_for_Python/3ddose/EX16MeVp_dose_y_profile.3ddose"
-z_path = "Desktop/Master/Data_for_Python/3ddose/EX16MeVp_dose_pdd.3ddose" 
-
-
-    
-#dose_1d = read_1d_dose(x_path)
-
-    
-# 3ddimensionale dosis classe schreiben
-
-path = "C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_dosxyz.3ddose"
 
 class xyz_array_from_dict:
     def __init__(self, array):
@@ -36,9 +19,14 @@ class dose3d:
     """
     def __init__(self, path):
         self.origin = path
-        self.__read_3ddose_file() #--- load data
-        self.__replace_boundary_with_voxel_center() #--- set voxel position to voxelcenter
+        #--- load data
+        self.__read_3ddose_file() 
+        #--- set voxel position to voxelcenter
+        self.__replace_boundary_with_voxel_center() 
+        #--- change datastructure
         self.dicts_to_xyz_arrays()
+        #--- on read initialize pdd @(0,0) and profiles along x and y at z=5cm
+        self.set_profiles()
 
         
     #__ makes this function inaccessible to the user -> sets it as private
@@ -88,35 +76,61 @@ class dose3d:
         self.position = xyz_array_from_dict(self.position)
 
     def find_closest_index(self, array, value):
-        """assumes the array is ordered !!!"""
         return abs(array - value).tolist().index( min(abs(array - value)))
           
-    #TODO!
-    def get_pdd(self, X=0.1, Y=0):
+    #--- setter functions
+    def set_profiles(self):
+        self.set_pdd()
+        self.set_x_profile()
+        self.set_y_profile()
+        
+    def set_pdd(self, X=0.8, Y=0):
         x_index = self.find_closest_index(self.position.x, X)
-        #y_index = self.find_closest_index(self.position.y, Y)
-        #print(X, "  found at  ", x_index, " because:")
-        #for i in range(len(self.position.x)):
-        #    print(i, self.position.x[i])
+        y_index = self.find_closest_index(self.position.y, Y)
+        self.pdd = self.dose_matrix[:, y_index, x_index]
+        self.pdd_error = self.error_matrix[:, y_index, x_index]
+            
+    def set_x_profile(self, Z=5, Y=0):
+        """ default depth for doseprofile is 5cm"""
+        y_index = self.find_closest_index(self.position.y, Y)
+        z_index = self.find_closest_index(self.position.z, Z)
+        self.x_profile = self.dose_matrix[z_index, y_index, :]
+        self.x_profile_error = self.error_matrix[z_index, y_index, :]
         
-        pass
+    def set_y_profile(self, Z=5, X=0):
+        """ default depth for doseprofile is 5cm"""
+        x_index = self.find_closest_index(self.position.x, X)
+        z_index = self.find_closest_index(self.position.z, Z)
+        self.y_profile = self.dose_matrix[z_index, :, x_index]
+        self.y_profile_error = self.error_matrix[z_index, :, x_index]
+    
+    #--- getter functions
+    def get_pdd(self):
+        return self.pdd, self.pdd_error
+    
+    def get_x_profile(self):
+        return self.x_profile, self.x_profile_error
         
-    #TODO!
-    def get_profile(self):
-        pass
-
+    def get_y_profile(self):
+        return self.y_profile, self.y_profile_error
+        
     
 
 
+# TODO ! use statdose linux only feature of EGS to validate this code !
 
-
-
-        
-
+path = "/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc/16MVp_h2o_phantom_beamsource_example.3ddose"
 dose = dose3d(path)
+plt.plot(dose.position.z, dose.pdd)
+plt.show()
 
-dose.get_pdd()
+plt.plot(dose.position.x, dose.x_profile)
+plt.plot(dose.position.y, dose.y_profile)
+plt.show()
 
+# %%
+import doselib.read as dl
+statdose = dl.get_data_from_agr("/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc//pdd_test.agr")
 
 
 
