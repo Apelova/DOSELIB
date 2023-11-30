@@ -1,9 +1,12 @@
 """
-    TODO
-        - add Documentation
-        - compare to statdose results from get_agr
-"""
+@author: Apelova 
 
+Module Task: get Data from .agr-File as output from statdose.
+    
+TODO
+- add Documentation
+- compare to statdose results from get_agr
+"""
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -113,14 +116,65 @@ class dose3d:
         
     def get_y_profile(self):
         return self.y_profile, self.y_profile_error
+             
+    def get_plane(self, AXIS, POSITION_ON_AXIS):  
+        if AXIS.lower()=="x":
+           if not self.__value_is_in_boundaries(AXIS, POSITION_ON_AXIS):
+               raise ValueError(f"Invalid input for Parameter POSITION_ON_AXIS: {POSITION_ON_AXIS} is not in the boundaries [{self.boundaries.x[0]}, {self.boundaries.x[-1]}]")
+           X_INDEX = self.find_closest_index(self.position.x, POSITION_ON_AXIS)    
+           return self.dose_matrix[:, :, X_INDEX]
         
-    
+        elif AXIS.lower()=="y":
+           if not self.__value_is_in_boundaries(AXIS, POSITION_ON_AXIS):
+               raise ValueError(f"Invalid input for Parameter POSITION_ON_AXIS: {POSITION_ON_AXIS} is not in the boundaries [{self.boundaries.y[0]}, {self.boundaries.y[-1]}]")
+           
+           Y_INDEX = self.find_closest_index(self.position.y, POSITION_ON_AXIS)    
+           return self.dose_matrix[:, Y_INDEX, :]
+        
+        elif AXIS.lower()=="z":
+           if not self.__value_is_in_boundaries(AXIS, POSITION_ON_AXIS):
+               raise ValueError(f"Invalid input for Parameter POSITION_ON_AXIS: {POSITION_ON_AXIS} is not in the boundaries [{self.boundaries.z[0]}, {self.boundaries.z[-1]}]")
+            
+           Z_INDEX = self.find_closest_index(self.position.z, POSITION_ON_AXIS)    
+           return self.dose_matrix[Z_INDEX, :, :]
+        
+        else:
+            raise TypeError(f"Invalid input for Parameter AXIS: '{AXIS}' is not an option viable options are x or X, y or Y, z or Z")
+        
+    #--- assisting functions
+    def __value_is_in_boundaries(self, AXIS, POSITION_ON_AXIS):
+        if AXIS.lower()=="x":
+           return self.boundaries.x[0] < POSITION_ON_AXIS < self.boundaries.x[-1]
+        
+        elif AXIS.lower()=="y":
+           return self.boundaries.y[0] < POSITION_ON_AXIS < self.boundaries.y[-1]
+        
+        elif AXIS.lower()=="z":
+           return self.boundaries.z[0] < POSITION_ON_AXIS < self.boundaries.z[-1]
+        
+        
+        
 
-
-# TODO ! use statdose linux only feature of EGS to validate this code !
 
 path = "/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc/16MVp_h2o_phantom_beamsource_example.3ddose"
-dose = dose3d(path)
+path = "C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_dosxyz.3ddose"
+dose = dose3d(path)#
+
+dose.get_plane("z", 10)
+
+
+
+
+
+# %%
+plt.imshow(dose.get_plane("Z", 0))
+plt.show()
+plt.imshow(dose.get_plane("x", 5))
+plt.show()
+
+
+# %%
+# TODO ! use statdose linux only feature of EGS to validate this code !
 plt.plot(dose.position.z, dose.pdd)
 plt.show()
 
@@ -139,7 +193,7 @@ statdose = dl.get_data_from_agr("/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc//
 
 
 
-
+commit 67c66dc
 
 
 

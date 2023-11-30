@@ -1,5 +1,10 @@
 """
-@author: apel04
+@author: Apelova 
+
+Module Task: get Data from .mcc-File as output from Mephysto.
+
+TODO
+- implement class for datastorage simliar read3ddose.py
 """
 import matplotlib.pyplot as plt
 import pandas as pd 
