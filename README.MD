@@ -1,7 +1,7 @@
 # Doselib - A library for processing EGSnrc's Monte-Carlo Simulation output 
 
-Thanks  to KIA EISINGA's blog this repository can be turned into a python module by following a few steps
-LINK: https://medium.com/analytics-vidhya/how-to-create-a-python-library-7d5aea80cc3f
+For now this repository is just a remote storage for some code i wrote.
+It will soon be ready to be used by others.
 
 # 1. Test if required packages are installed:
 	~ pip install wheel
