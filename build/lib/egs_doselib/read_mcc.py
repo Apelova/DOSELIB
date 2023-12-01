@@ -3,10 +3,13 @@
 
 Module Task: get Data from .mcc-File as output from Mephysto.
 
+Important
+- needs implementation to figure out xyz axis ! from grantry positon and if in plane or crossplane !
+
 TODO
-- implement class for datastorage simliar read3ddose.py
-- is the order of the beamscans fixed ? 
-- is it possible to get information about the z-depth for the profiles ? 
+- is it possible to get information about the z-depth for the profiles ? ja !!!
+SCAN_CURVETYPE=INPLANE_PROFILE !
+SCAN_DEPTH=52.50 !
 
 The order z-> x -> y is based on the scanning procedure inside the beamscan phantom !
 """
@@ -28,10 +31,10 @@ class dose_mcc:
         self.__load_data()
         #--- set voxel position to voxelcenter
         self.__restructure_data()
-        #--- change datastructure
-        #--- load data
-        #--- on read initialize pdd @(0,0) and profiles along x and y at z=5cm
-        #--- output information on read
+        #--- change scale from mm to cm
+        self.position.x = self.position.x/10
+        self.position.y = self.position.y/10
+        self.position.z = self.position.z/10
          
     def __load_data(self):
         """
@@ -135,24 +138,24 @@ class dose_mcc:
 
 
 
-
-
-test1="C:/Users/apel04/Desktop/master/Data_for_python/mcc/6MeV_10x10_PDD_hori_alignement.mcc"
-test2="C:/Users/apel04/Desktop/master/Data_for_python/mcc/6MeV_10x10_Profile_vert_alignement.mcc"
-test3="C:/Users/apel04/Desktop/master/Data_for_python/mcc/delete_me_all_axis.mcc"
-dose = dose_mcc(test3)
-
-# x profile
-plt.plot(dose.position.x, dose.x_profile)
-plt.show()
-
-# y profile
-plt.plot(dose.position.y, dose.y_profile)
-plt.show()
-
-# pdd
-plt.plot(dose.position.z, dose.pdd)
-plt.show()
+# =============================================================================
+# test1="C:/Users/apel04/Desktop/master/Data_for_python/mcc/6MeV_10x10_PDD_hori_alignement.mcc"
+# test2="C:/Users/apel04/Desktop/master/Data_for_python/mcc/6MeV_10x10_Profile_vert_alignement.mcc"
+# test3="C:/Users/apel04/Desktop/master/Data_for_python/mcc/delete_me_all_axis.mcc"
+# dose = dose_mcc(test3)
+# 
+# # x profile
+# plt.plot(dose.position.x, dose.x_profile)
+# plt.show()
+# 
+# # y profile
+# plt.plot(dose.position.y, dose.y_profile)
+# plt.show()
+# 
+# # pdd
+# plt.plot(dose.position.z, dose.pdd)
+# plt.show()
+# =============================================================================
 
 
 

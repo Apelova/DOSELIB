@@ -2,13 +2,19 @@
 @author: Apelova 
 
 Module Task: get Data from .agr-File as output from statdose.
-    
+
+Important
+- make a dose_3d from ptroject name
+- therefore read all 3 profiles from chamber 3ddose output     
+
 TODO
+- 
 - add Documentation
-- add console output to show where the voxel lays for a certain input value 
-- dose to csv !!!
+    - to save an array as csv use pd.DataFrame(array).to_csv("path") !!
+- add console output to show where the voxel lays for a certain input value !!!
 - type testing in every function
 - add example data to the repo
+
 """
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -36,9 +42,32 @@ class dose_3d:
         #--- output information on read
         if INFO:
             print(self)
+        #--- boolearn to decide what to print
+        self.has_multple_inputs = False
         
-    def __str__(self):
-        return f"""
+    
+    def __str__(self, ):
+        if self.has_multple_inputs:
+            return f"""
+##############################################################################
+#  Successfully read the 3ddose-Files and initialized the default PDD and profiles. \n#
+#  X-Profile is available within the Boundaries:
+   {self.boundaries.x.tolist()}
+#
+#  Y-Profile is available within the Boundaries:
+   {self.boundaries.y.tolist()}
+#
+#  Z-Profile is available within the Boundaries:
+   {self.boundaries.z.tolist()}
+#   
+#  NOTE THAT IT IS ONLY POSSIBLE TO SELECT VALUES ON THOSE PROFILES SINCE THEY ARE READ FROM MULTIPLE 3ddose-files         
+#  You can access the Dose-values quickly through OBJECT_NAME.pdd, OBJECT_NAME.x_profile, OBJECT_NAME.y_profile.
+#  Alternatnatively you can use set_profiles or set_pdd to change the position of each Doseprofile or use get_plane to get a 2D-np.array representing a plane.
+##############################################################################
+""" 
+            
+        else:
+            return f"""
 ##############################################################################
 #  Successfully read the 3ddose-File and initialized the default PDD and profiles. \n#
 #  Voxel Boundaries in X-direction:
@@ -53,10 +82,7 @@ class dose_3d:
 #  You can access the Dose-values quickly through OBJECT_NAME.pdd, OBJECT_NAME.x_profile, OBJECT_NAME.y_profile.
 #  Alternatnatively you can use set_profiles or set_pdd to change the position of each Doseprofile or use get_plane to get a 2D-np.array representing a plane.
 ##############################################################################
-"""
-            
-        
-        
+"""     
     #__ makes this function inaccessible to the user -> sets it as private
     def __read_3ddose_file(self):        
         #--- initialize data structures
@@ -180,64 +206,33 @@ class dose_3d:
         
         elif AXIS.lower()=="z":
            return self.boundaries.z[0] < POSITION_ON_AXIS < self.boundaries.z[-1]
-        
-        
-   
-if __name__ == "__main__":
-    #path = "/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc/16MVp_h2o_phantom_beamsource_example.3ddose"
-    #path = "C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_dosxyz.3ddose"
-    #dose = dose3d(path)
     
-    #plt.imshow(dose.get_plane("z", 10))
-    #plt.imshow(dose.get_plane("y", 10))
+    def add_profile(self, PATH, AXIS):
+        """If the initial 3ddose-file is just a PDD you can add profiles with add_profile!"""
+        #TODO! type testing !
+        
+        profile = dose_3d(PATH)
+        if AXIS.lower()=="x":
+            self.has_multple_inputs = True
+            self.boundaries.x = profile.boundaries.x
+            self.position.x = profile.position.x
+            self.x_profile = profile.x_profile
+            self.x_profile_error = profile.x_profile_error
+            
+        elif AXIS.lower()=="y":
+            self.has_multple_inputs = True
+            self.boundaries.y = profile.boundaries.y
+            self.position.y = profile.position.y
+            self.y_profile = profile.y_profile
+            self.y_profile_error = profile.y_profile_error
 
-
-
-
-# =============================================================================
-# 
-# # %%
-# path = "/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc/16MVp_h2o_phantom_beamsource_example.3ddose"
-# path = "C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_dosxyz.3ddose"
-# dose = dose3d(path)#
-# dose.get_plane("z", 10)
-# 
-# 
-# 
-# 
-# 
-# # %%
-# plt.imshow(dose.get_plane("Z", 0))
-# plt.show()
-# plt.imshow(dose.get_plane("x", 5))
-# plt.show()
-# 
-# 
-# # %%
-# # TODO ! use statdose linux only feature of EGS to validate this code !
-# plt.plot(dose.position.z, dose.pdd)
-# plt.show()
-# 
-# plt.plot(dose.position.x, dose.x_profile)
-# plt.plot(dose.position.y, dose.y_profile)
-# plt.show()
-# 
-# # %%
-# import doselib.read as dl
-# statdose = dl.get_data_from_agr("/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc//pdd_test.agr")
-# 
-# 
-# =============================================================================
-
-
-
-
-
-
-
-
-
-
+        else:
+            raise ValueError(f"Invalid input for Parameter AXIS: '{AXIS}' is not an option viable options are x or X, y or Y!")
+            
+        del profile
+#path = "/home/marvin/EGSnrc/EGSnrc/egs_home/dosxyznrc/16MVp_h2o_phantom_beamsource_example.3ddose"#
+#dose = dose_3d(path)
+#plt.imshow(dose.get_plane("", 10))
 
 
 
