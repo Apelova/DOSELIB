@@ -2,9 +2,6 @@
 @author: Apelova 
 https://github.com/Apelova/EGS_DOSE_TOOLS
 
-TODO
-- add example data and example .py to the repo!
-
 The function add_profile is a unique feature I do not recommend you to use.
 This is a routine I added for myself which allows me to use multiple 3ddose files from egs++.
 Each of them only scores the profile at one z and therfore saves storage/computation time.
@@ -27,6 +24,8 @@ class dose_3d:
     def __init__(self, PATH, INFO=False):
         self.origin = PATH
         if self.__test_path(INFO):        
+            #--- boolean value that decides how dose_3d instance is treated/printed
+            self.has_multiple_inputs = False
             #--- load data
             self.__read_3ddose_file() 
             #--- set voxel position to voxelcenter
@@ -37,8 +36,6 @@ class dose_3d:
             self.__set_profiles()
             #--- gather information for read
             self.__get_profile_depths()
-            #--- boolearn to decide what to print
-            self.has_multple_inputs = False
             if INFO:
             #--- output information on read
                 print(self)
@@ -47,7 +44,7 @@ class dose_3d:
 
     def __str__(self):
         """Print Information about the 3ddose object """
-        if self.has_multple_inputs:
+        if self.has_multiple_inputs:
             return f"""
 ##############################################################################
   Successfully read the 3ddose-Files and initialized the default PDD and profiles. \n
@@ -151,16 +148,19 @@ class dose_3d:
         if np.sum( abs(array-value) == min(abs(array - value)))> 1:
             print(f"WARNING --- multiple voxels in same distance to input {value}. Selected Voxel with center at {array[idx]}")
         return idx 
-          
+        
     #--- setter functions
     def __set_profiles(self):
         """ set default pdd and profiles on read """
         self.set_pdd(MUTE=True)
         self.set_x_profile(MUTE=True)
         self.set_y_profile(MUTE=True)
-        
+                
     def set_pdd(self, X=0, Y=0, MUTE=False):
         if type(X) and type(Y) in [float, int]:
+            if self.has_multiple_inputs:
+                raise NotImplementedError("The Instance has multiple .3ddose Inputs and thus this function is unavailable. To get the profile adde use .pdd!")
+        
             x_index = self.find_closest_index(self.position.x, X)
             y_index = self.find_closest_index(self.position.y, Y)
             self.pdd = self.dose_matrix[:, y_index, x_index]
@@ -169,10 +169,14 @@ class dose_3d:
                 print(f"Loaded Z-Profile/PDD perpendicular to XY-plane going through the Voxel at (X,Y)=({self.position.x[x_index]},{self.position.y[y_index]})!\n")
         else:
             raise TypeError("The Parameters X and Y accept only integer and Float values !")
+                
             
     def set_x_profile(self, Z=0, Y=0, MUTE=False):
         """ default depth for doseprofile is 5cm"""
         if type(Z) and type(Y) in [float, int]:
+            if self.has_multiple_inputs:
+                raise NotImplementedError("The Instance has multiple .3ddose Inputs and thus this function is unavailable. To get the profile adde use .x_profile!")
+        
             y_index = self.find_closest_index(self.position.y, Y)
             z_index = self.find_closest_index(self.position.z, Z)
             self.x_profile = self.dose_matrix[z_index, y_index, :]
@@ -186,13 +190,15 @@ class dose_3d:
     def set_y_profile(self, Z=0, X=0, MUTE=False):
         """ default depth for doseprofile is 5cm"""
         if type(Z) and type(X) in [float, int]:
+            if self.has_multiple_inputs:
+                raise NotImplementedError("The Instance has multiple .3ddose Inputs and thus this function is unavailable. To get the profile adde use .y_profile!")
+            
             x_index = self.find_closest_index(self.position.x, X)
             z_index = self.find_closest_index(self.position.z, Z)
             self.y_profile = self.dose_matrix[z_index, :, x_index]
             self.y_profile_error = self.error_matrix[z_index, :, x_index]
             if not MUTE:
                 print(f"Loaded Y-Profile at the depth Z={self.position.z[z_index]} going through X={self.position.x[x_index]}!\n")
-
         else:
             raise TypeError("The Parameters Z and Y accept only integer and Float values !")
         
@@ -252,7 +258,8 @@ class dose_3d:
         if AXIS.lower()=="x":
             if len(profile.position.x) <= 10:
                 print(f"Warning---The X-profile you want to add has only {len(profile.position.x)} Entries. I hope you know what you are doing.")
-            self.has_multple_inputs = True
+                #--- set the initial positions for x and y such that adding profiles wont allow setting faulty z-profiles (when adding the first profile only)
+            self.has_multiple_inputs = True
             self.boundaries.x = profile.boundaries.x
             self.position.x = profile.position.x
             self.x_profile = profile.x_profile
@@ -263,7 +270,8 @@ class dose_3d:
         elif AXIS.lower()=="y":
             if len(profile.position.y) <= 10:
                 print(f"Warning---The Y-profile you want to add has only {len(profile.position.y)} Entries. I hope you know what you are doing.")
-            self.has_multple_inputs = True
+            #--- set the initial positions for x and y such that adding profiles wont allow setting faulty z-profiles (when adding the first profile only)
+            self.has_multiple_inputs = True
             self.boundaries.y = profile.boundaries.y
             self.position.y = profile.position.y
             self.y_profile = profile.y_profile
@@ -273,47 +281,9 @@ class dose_3d:
             
         else:
             raise ValueError(f"Invalid input for Parameter AXIS: '{AXIS}' is not an option viable options are x or X, y or Y!\n")
-            
+
         del profile
         
     def __get_profile_depths(self):
         self.available_depths_x = self.position.x
         self.available_depths_y = self.position.y
-               
-        
-        
-        
-#import matplotlib.pyplot as plt        
-dose = dose_3d("C:/Users/apel04/Desktop/master/Simulationen/archive/TEST_NRC/NRC_1e9/NRC_6MV_dosxyz.3ddose")
-
-#dose = dose_3d("C:/Users/apel04/Desktop/master/Simulationen/archive/TEST_NRC/NRC_1e9/NRC_6MV_dosxyz.3ddose")
-#dose = dose_3d("C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_chamber_pdd.3ddose")
-#dose.add_profile("C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_chamber_x_profile.3ddose", AXIS="X")
-#dose.add_profile("C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_chamber_y_profile.3ddose", AXIS="Y")
-#dose.add_profile("C:/Users/apel04/Desktop/master/comparison_dose_chamber/delete_me.3ddose", AXIS="X")
-#dose.set_pdd(1, 1.35)        
-#dose.set_x_profile(1.01, 1.35)        
-#dose.set_y_profile(1.01, 1.35)        
-#print(dose)               
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
