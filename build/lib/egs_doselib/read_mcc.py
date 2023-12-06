@@ -1,7 +1,8 @@
 """
 @author: Apelova 
+https://github.com/Apelova/EGS_DOSE_TOOLS
 
-Module Task: get Data from .mcc-File as output from Mephysto.
+Definition of dose_mcc-class to get Data from .mcc-File as output from Mephysto.
 
 So far only Supports one PDD pro dose_mcc-instance! 
 """

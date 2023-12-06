@@ -2,10 +2,6 @@
 @author: Apelova 
 https://github.com/Apelova/EGS_DOSE_TOOLS
 
-TODO
-- add example data and example .py to the repo!
-- add egsinp to show how to get the x,y,z profile
-
 The function add_profile is a unique feature I do not recommend you to use.
 This is a routine I added for myself which allows me to use multiple 3ddose files from egs++.
 Each of them only scores the profile at one z and therfore saves storage/computation time.
@@ -14,11 +10,16 @@ import pandas as pd
 import numpy as np
 import os
 
+
 class xyz_array:
     def __init__(self, array):
         self.x = np.array(array["x"])
         self.y = np.array(array["y"])
         self.z = np.array(array["z"])
+
+
+def norm(arr):
+    return np.array(arr/max(arr)*100)
 
 class dose_3d:
     """
@@ -185,6 +186,7 @@ class dose_3d:
             z_index = self.find_closest_index(self.position.z, Z)
             self.x_profile = self.dose_matrix[z_index, y_index, :]
             self.x_profile_error = self.error_matrix[z_index, y_index, :]
+            self.profile_depth_x = self.position.z[z_index]
             if not MUTE:
                 print(f"Loaded X-Profile at the depth Z={self.position.z[z_index]} going through Y={self.position.y[y_index]}!\n")
         else:
@@ -201,6 +203,7 @@ class dose_3d:
             z_index = self.find_closest_index(self.position.z, Z)
             self.y_profile = self.dose_matrix[z_index, :, x_index]
             self.y_profile_error = self.error_matrix[z_index, :, x_index]
+            self.profile_depth_y = self.position.z[z_index]
             if not MUTE:
                 print(f"Loaded Y-Profile at the depth Z={self.position.z[z_index]} going through X={self.position.x[x_index]}!\n")
         else:
@@ -268,7 +271,11 @@ class dose_3d:
             self.position.x = profile.position.x
             self.x_profile = profile.x_profile
             self.x_profile_error = profile.x_profile_error
-            self.available_depths_x = np.append(self.available_depths_x, profile.position.z)
+            if np.array_equal(self.available_depths_x, self.position.z):
+                self.available_depths_x = np.append([], profile.position.z)
+            else:
+                self.available_depths_x = np.append(self.available_depths_x, profile.position.z)
+
             print(f"added x-profile at z {profile.position.z.tolist()}!\n")
             
         elif AXIS.lower()=="y":
@@ -280,7 +287,10 @@ class dose_3d:
             self.position.y = profile.position.y
             self.y_profile = profile.y_profile
             self.y_profile_error = profile.y_profile_error
-            self.available_depths_y = np.append(self.available_depths_y, profile.position.z)
+            if np.array_equal(self.available_depths_y, self.position.z): #different definition between single and lonely pdd
+                self.available_depths_y = np.append([], profile.position.z)
+            else:
+                self.available_depths_y = np.append(self.available_depths_y, profile.position.z)
             print(f"added y-profile at z {profile.position.z.tolist()}!\n")
             
         else:
@@ -289,32 +299,14 @@ class dose_3d:
         del profile
         
     def __get_profile_depths(self):
-        self.available_depths_x = self.position.x
-        self.available_depths_y = self.position.y
-               
-        
-#--- Example         
-#dose = dose_3d("C:/Users/apel04/Desktop/master/Simulationen/archive/TEST_NRC/NRC_1e9/NRC_6MV_dosxyz.3ddose")
-#dose = dose_3d("C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_chamber_pdd.3ddose")
-#dose.add_profile("C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_chamber_x_profile.3ddose", AXIS="X")
-#dose.add_profile("C:/Users/apel04/Desktop/master/comparison_dose_chamber/NRC_chamber_y_profile.3ddose", AXIS="Y")
+        self.available_depths_x = self.position.z
+        self.available_depths_y = self.position.z
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    def set_profiles(self, Z, MUTE=False):
+        value_in_x = self.available_depths_x[self.find_closest_index(self.available_depths_x, Z)]        
+        if value_in_x in self.available_depths_y:
+            self.set_x_profile(Z, Y=0, MUTE=MUTE)
+            self.set_y_profile(Z, X=0, MUTE=MUTE)
+        else:
+            raise ValueError("Depth {Z} is not available for both profiles. For more information use .available_depths_x/y !")
+            
