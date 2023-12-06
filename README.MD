@@ -2,6 +2,8 @@
 
 # 1. Install the package through the -whl-File by running:
 	~ pip install /path/to/wheelfile.whl
+        (The .whl is found in the directory dist or can be obtained by running the following command in the terminal)
+        	~ python3 setup.py bdist_wheel
 
 # 2. Import the package by using either 
 	from egs_doselib import * 
