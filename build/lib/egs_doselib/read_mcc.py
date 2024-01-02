@@ -122,7 +122,10 @@ class dose_mcc:
             #---convert
             self.all_scans[i].POSITION = np.array(self.all_scans[i].DATA)[:,0]/10 #/10 mm to cm 
             self.all_scans[i].DOSE = np.array(self.all_scans[i].DATA)[:,1]
-            self.all_scans[i].ERROR= np.array(self.all_scans[i].DATA)[:,2]
+            try:
+                self.all_scans[i].ERROR= np.array(self.all_scans[i].DATA)[:,2]
+            except: #some meassurements dont store the error !
+                self.all_scans[i].ERROR= np.array([0 for i in self.all_scans[i].DOSE])
             #--- invert data such that coordinate systems match !
             if "-" in self.all_scans[i].AXIS:
                 self.all_scans[i].POSITION = self.all_scans[i].POSITION[::-1]*-1 #necessary if scan is not symmetric !
