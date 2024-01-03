@@ -230,7 +230,7 @@ class dose_mcc:
     def __str__(self):
         return f""" ##############################################################################
  Successfully read the .mcc-File and initialized the default PDD and profiles. \n
-   - Percentage Depth Dose loaded for values of z in [{self.position.z[0]}, {self.position.z[-1]}]
+   - Percentage Depth Dose loaded for values of z in [{self.position.z[0] if self.position.z.size else '-'}, {self.position.z[-1] if self.position.z.size else '-'}]
    - Available x-Profile depths are {[ i [1] for i in self.available_depths_x]} at {[ i[0] for i in self.available_depths_x]} 
    - Available y-Profile depths are {[ i [1] for i in self.available_depths_y]} at {[ i[0] for i in self.available_depths_y]}\n
  By default the first available Profiles are set as .x_profile or .y_profile!
