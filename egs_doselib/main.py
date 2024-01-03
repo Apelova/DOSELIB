@@ -93,55 +93,52 @@ class dose_object:
         self.Q = 1.2661*self.D20/self.D10 - 0.0595
     
     def set_metrics_profile(self, AXIS):
-        if AXIS=="X":
-            self.D0_x = self.get_Dose_on_axis("X")
-            self.plateau_limits_x = self.get_plateau_limits("X")
-            self.penumbra_limits_x = self.get_penumbra_limits("X")
-            self.Hx = self.get_homogeneity(AXIS)
-        
-        
-    def get_Dose_on_axis(self, AXIS): #hier muss man eigentlich auch interpolieren !
-        if AXIS=="X":
-            return self.x_profile.norm[self.find_closest_index(self.position.x, 0)]
-
-        if AXIS=="Y":
-            return self.position.y[self.y_profile.norm>20][[0, -1]]
-            
+        self.set_Dose_on_axis(AXIS)
+        self.set_plateau_limits(AXIS)
+        self.set_penumbra_limits(AXIS)
+        self.set_homogeneity(AXIS)
     
         
         
-    def get_plateau_limits(self, AXIS): #hier ist wahrscheinlich eine lineare interpolation besser geeignet !
+    def set_Dose_on_axis(self, AXIS): #hier muss man eigentlich auch interpolieren !
         if AXIS=="X":
-            return self.position.x[self.x_profile.norm>80][[0, -1]]
+            self.D0_x = self.x_profile.norm[self.find_closest_index(self.position.x, 0)]
 
         if AXIS=="Y":
-            return self.position.y[self.y_profile.norm>80][[0, -1]]
+            self.D0_y = self.x_profile.norm[self.find_closest_index(self.position.y, 0)]
         
-    def get_penumbra_limits(self, AXIS):
+        
+    def set_plateau_limits(self, AXIS): #hier ist wahrscheinlich eine lineare interpolation besser geeignet !
         if AXIS=="X":
-            return self.position.x[self.x_profile.norm>20][[0, -1]]
+            self.plateau_limits_x = self.position.x[self.x_profile.norm>80][[0, -1]]
 
         if AXIS=="Y":
-            return self.position.y[self.y_profile.norm>20][[0, -1]]
-            
+            self.plateau_limits_y = self.position.y[self.y_profile.norm>80][[0, -1]]
+        
+    def set_penumbra_limits(self, AXIS):
+        if AXIS=="X":
+            self.penumbra_limits_x =  self.position.x[self.x_profile.norm>20][[0, -1]]
+
+        if AXIS=="Y":
+            self.penumbra_limits_y = self.position.y[self.y_profile.norm>20][[0, -1]]      
     
-    def get_homogeneity(self, AXIS):
+    def set_homogeneity(self, AXIS):
         if AXIS=="X":
             l_ix = self.find_closest_index(self.position.x, self.plateau_limits_x[0])
             r_ix = self.find_closest_index(self.position.x, self.plateau_limits_x[1])
-            return (max(self.x_profile.norm[l_ix : r_ix+1]) - min(self.x_profile.norm[l_ix : r_ix+1]))/self.D0_x
+            self.Hx = (max(self.x_profile.norm[l_ix : r_ix+1]) - min(self.x_profile.norm[l_ix : r_ix+1]))/self.D0_x    
         
-                  
         if AXIS=="Y":
-            pass
-       
+            l_ix = self.find_closest_index(self.position.y, self.plateau_limits_y[0])
+            r_ix = self.find_closest_index(self.position.y, self.plateau_limits_y[1])
+            self.Hy = (max(self.y_profile.norm[l_ix : r_ix+1]) - min(self.y_profile.norm[l_ix : r_ix+1]))/self.D0_y
+    
         
-    # 1. Penumbra grenzen
-    # 4. Plateau grenzen
     # 5. Halbwertsbreite
     # 2. Symmetrie
     # 3.homogenität
     # 6. CAX_deviation qSchäfer
+    # gibts  das beides für x und y ?    
     
     
     #hier dann if AXIS=="X": ......
