@@ -1,2 +1,3 @@
-from .read_3ddose import dose_3d
-from .read_mcc import dose_mcc
+from .main import dose_3d
+from .main import dose_mcc
+
