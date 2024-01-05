@@ -811,12 +811,12 @@ class dose_mcc(dose_object):
 path = "/home/marvin/Desktop/master"
 path = "C:/Users/apel04/Desktop/master"
 
-test_exp = dose_mcc(path+"/Messungen/6MeV_10x10_Dose_Profiles/profiles_@_5cm_ff_and_fff_SSD_100/FF/combined_ff.mcc")
+#test_exp = dose_mcc(path+"/Messungen/6MeV_10x10_Dose_Profiles/profiles_@_5cm_ff_and_fff_SSD_100/FF/combined_ff.mcc")
 
-if True:
+if False:
     test_dosy = dose_3d(path+"/Simulationen/DATA/TEST_PTB/DOSXYZ_NRC/PTB_6MV_old_dosxyz.3ddose")
 
-if True:
+if False:
     test_chamber = dose_3d(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_pdd.3ddose")
     test_chamber.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_x_profile.3ddose", AXIS="X")
     test_chamber.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_y_profile.3ddose", AXIS="Y") 
@@ -848,7 +848,7 @@ if False:
 # X-Profile metrics
 ####################    
 names = ["Experiment", "DOSXYZ_NRC", "EGS_CHAMBER"]
-if True:
+if False:
     fig, axs = plt.subplots(1,3, figsize=(30,10))
     for i, dose in enumerate([test_exp, test_dosy, test_chamber]):
         label = f"{names[i]}\n    H = {round(dose.H_x,3)}\n    S = {round(dose.S_x,3)}\nCAX = {round(dose.dCAX_x,3)}"
