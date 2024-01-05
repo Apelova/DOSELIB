@@ -6,7 +6,9 @@ Definition of all classes and methods used in to analyse .3ddose or .mcc files.
 
 
 """
+from scipy.optimize import fsolve
 import matplotlib.pyplot as plt
+from scipy import interpolate
 import pandas as pd 
 import numpy as np
 import os
@@ -80,7 +82,10 @@ class dose_object:
         #--- X-Profile metrics
         self.D0_x= np.nan
         self.plateau_limits_x= np.nan
-        self.penumbra_limits_x= np.nan
+        self.penumbra_limits_x_20= np.nan
+        self.penumbra_limits_x_80= np.nan
+        self.penumbra_yl= np.nan
+        self.penumbra_yr= np.nan
         self.H_x= np.nan
         self.HW_x= np.nan
         self.S_x= np.nan
@@ -88,7 +93,10 @@ class dose_object:
         #--- Y-Profile metrics
         self.D0_y= np.nan
         self.plateau_limits_y= np.nan
-        self.penumbra_limits_y= np.nan
+        self.penumbra_limits_y_20= np.nan
+        self.penumbra_limits_y_80= np.nan
+        self.penumbra_yl= np.nan
+        self.penumbra_yr= np.nan
         self.H_y= np.nan
         self.HW_y= np.nan
         self.S_y= np.nan
@@ -101,11 +109,25 @@ class dose_object:
             print(f"WARNING --- multiple voxels in same distance to input {value}. Selected Voxel with center at {array[idx]}")
         return idx 
     
-    #TODO! hier bei den metriken anstann index suche auf den jeweiligen wert interpolieren ! wenn es den wert nicht direkt gibt
+    def __get_interpol_indices(self, z):
+        if z==10:
+            l_ix, r_ix = self.i_10, self.i_10
+
+        if z==20:
+            l_ix, r_ix = self.i_20, self.i_20
+
+        while self.position.z[l_ix] > z:
+            l_ix -= 1
+        
+        while self.position.z[r_ix] < z:
+            r_ix += 1
+        
+        return l_ix, r_ix
+    
     def set_pdd_metrics(self):
         """ 
             The values D0, D10, D20 are all relative and can be transforme to 
-            absolute dose values through multiplication with self.pdd_max_abs
+            absolute dose values through multiplication with self.pdd_max_absma
         """
         
         #--- maximum absolute Dose
@@ -114,105 +136,154 @@ class dose_object:
         self.pdd_i_max   = self.pdd.norm.tolist().index(100)
         #--- corresponting Position on z-Axis to the maximum
         self.Rmax        = self.position.z[self.pdd_i_max]
+
         #--- relative Surfacedose
-        self.D0          = round(self.pdd.norm[0], 3)
-        #--- indices to dose at 10cm, 20cm 
+        if (0 in self.position.z):
+            self.D0 = round(self.pdd.norm[self.find_closest_index(self.position.z, 0, show_warning=False)], 3) # den wert über index nehmen !
+        else:
+            f = interpolate.interp1d(self.position.z[:2], self.pdd.norm[:2], kind="linear", fill_value='extrapolate')
+            self.D0 = round(f([0])[0], 3)
+        
+        #--- indices at or close to depth 10cm/20cm 
         self.i_10 = self.find_closest_index(self.position.z, 10, show_warning=False)
-        self.i_20 = self.find_closest_index(self.position.z, 20, show_warning=False)
-        #--- get the Dose at 10 cm from the index and if it is equidistant to two points average !
-        self.D10 = round(self.pdd.norm[self.i_10], 3)
+        self.i_20 = self.find_closest_index(self.position.z, 20, show_warning=False)        
+
+        #--- get the Dose at 10 cm if neccessary interpolate (quadratic)!
+        if (10 in self.position.z):
+            self.D10 = round(self.pdd.norm[self.i_10], 3)
+        else: 
+            l_ix, r_ix = self.__get_interpol_indices(10)
+            f = interpolate.interp1d(self.position.z[[l_ix, r_ix]], self.pdd.norm[[l_ix, r_ix]], kind="linear", fill_value='extrapolate')
+            self.D10 = round(f([10])[0], 3)
+
         #--- get the Dose at 20 cm from the index and if it is equidistant to two points average !
-        self.D20 = round(self.pdd.norm[self.i_20], 3)
+        if (20 in self.position.z):
+            self.D20 = round(self.pdd.norm[self.i_20], 3)
+        else: 
+            l_ix, r_ix = self.__get_interpol_indices(20)
+            f = interpolate.interp1d(self.position.z[[l_ix, r_ix]], self.pdd.norm[[l_ix, r_ix]], kind="linear", fill_value='extrapolate')
+            self.D20 = round(f([20])[0], 3)
+
         #--- Quality Index after DIN 6800-2
-        self.Q = 1.2661*self.D20/self.D10 - 0.0595
+        self.Q = round(1.2661*self.D20/self.D10 - 0.0595, 3)
+    
     
     def set_metrics_profile(self, AXIS):
-        self.set_Dose_on_axis(AXIS)
-        self.set_plateau_limits(AXIS)
-        self.set_penumbra_limits(AXIS)
-        self.set_homogeneity(AXIS)
-        self.set_halfwidth(AXIS)
-        self.set_symmetry(AXIS)
-        self.set_dCAX(AXIS)
+        self.__set_Dose_on_axis(AXIS)
+        self.__set_penumbra_limits_20(AXIS)
+        self.__set_penumbra_limits_80(AXIS)
+        self.__set_penumbra_width(AXIS)
+        self.__set_halfwidth(AXIS)
+        self.__set_dCAX(AXIS)
+        self.__set_homogeneity(AXIS)
+        #self.__set_symmetry(AXIS)
         
-    def set_Dose_on_axis(self, AXIS): #hier muss man eigentlich auch interpolieren !
-        match AXIS:
-            case "X":
-                self.D0_x = self.x_profile.norm[self.find_closest_index(self.position.x, 0)]
+    def __set_Dose_on_axis(self, AXIS): #hier muss man eigentlich auch interpolieren !
+        """ it is expected that dose the profiles include 0 !!"""
+        if AXIS =="X":
+            self.D0_x = self.x_profile.norm[self.find_closest_index(self.position.x, 0)]
     
-            case "Y":
-                self.D0_y = self.y_profile.norm[self.find_closest_index(self.position.y, 0)]
+        if AXIS =="Y":
+            self.D0_y = self.y_profile.norm[self.find_closest_index(self.position.y, 0)]
             
+    def get_limits_from_interpolation(self, position, dose_array, dose_value, degree="linear"):
+        """ Used for FWHM, 20%, 80% -> Penumbra widths"""
+        l_ix = self.find_closest_index(dose_array, dose_array[dose_array > dose_value][0])
+        r_ix = self.find_closest_index(dose_array, dose_array[dose_array > dose_value][-1])
+        #--- get linear functions for interpolation
+        if degree == "linear":
+            f_l = interpolate.interp1d(position[[l_ix-1, l_ix]], dose_array[[l_ix-1, l_ix]], fill_value='extrapolate', kind="linear")
+            f_r = interpolate.interp1d(position[[r_ix, r_ix+1]], dose_array[[r_ix, r_ix+1]], fill_value='extrapolate', kind="linear")
+            
+        elif degree == "quadratic":
+            f_l = interpolate.interp1d(position[[l_ix-1, l_ix, l_ix+1]], dose_array[[l_ix-1, l_ix, l_ix+1]], fill_value='extrapolate', kind="quadratic")
+            f_r = interpolate.interp1d(position[[r_ix-1, r_ix, r_ix+1]], dose_array[[r_ix-1, r_ix, r_ix+1]], fill_value='extrapolate', kind="quadratic")
+
+        else:
+            raise TypeError("Invalid polynomial degree. Valid Inputs are 'linear' or 'quadratic'")
+        #--- search for root of the functions below to find x !
+        f_l_ = lambda x: f_l(x)-dose_value
+        f_r_ = lambda x: f_r(x)-dose_value
+        #--- linear interpolation to point x where D=0.8'D0
+        x_l = fsolve(f_l_, position[l_ix])                
+        x_r = fsolve(f_r_, position[r_ix])
+        return np.array([x_l[0], x_r[0]]) #return left and right value
+
+    def __set_halfwidth(self, AXIS):
+       if AXIS =="X":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.x, self.x_profile.norm, 50, degree = "quadratic")
+            #--- store outer limtis                
+            self.HW_x = np.array([x_l, x_r])
+     
+       if AXIS =="Y":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.y, self.y_profile.norm, 50, degree = "quadratic")
+            #--- store outer limtis                
+            self.HW_y = np.array([x_l, x_r])    
+
+    def __set_penumbra_limits_80(self, AXIS): #hier ist wahrscheinlich eine lineare interpolation besser geeignet !
+        # Hier die werte für x==80 prozent her holen
+       if AXIS =="X":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.x, self.x_profile.norm, 80, degree = "quadratic")
+            self.penumbra_limits_x_80 = np.array([x_l, x_r])
+                
+       if AXIS =="Y":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.y, self.y_profile.norm, 80, degree = "quadratic")
+            self.penumbra_limits_y_80 = np.array([x_l, x_r])
+                        
+    def __set_penumbra_limits_20(self, AXIS):
+       if AXIS =="X":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.x, self.x_profile.norm, 20, degree="quadratic")
+            self.penumbra_limits_x_20 = np.array([x_l, x_r])
+    
+       if AXIS =="Y":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.y, self.y_profile.norm, 20, degree="quadratic")
+            self.penumbra_limits_y_20 = np.array([x_l, x_r])
+
+    def __set_penumbra_width(self, AXIS):
+       if AXIS =="X":
+            self.penumbra_xl= self.penumbra_limits_x_80[0]-self.penumbra_limits_x_20[0]
+            self.penumbra_xr= self.penumbra_limits_x_20[1]-self.penumbra_limits_x_80[1]
+       if AXIS =="Y":
+            self.penumbra_yl= self.penumbra_limits_y_80[0]-self.penumbra_limits_y_20[0]
+            self.penumbra_yr= self.penumbra_limits_y_20[1]-self.penumbra_limits_y_80[1]
+
+    def __set_homogeneity(self, AXIS): 
+       if AXIS =="X":
+            #--- find index/limits inside 0.8 of the FWHM
+            self.__l_ix  = self.find_closest_index(self.position.x, self.position.x[self.HW_x[0]*0.8 < self.position.x][0])
+            self.__r_ix  = self.find_closest_index(self.position.x, self.position.x[self.HW_x[1]*0.8 < self.position.x][0])
+            #--- caluclate homgeinity defined as (D_max-Dmin)/D0                 
+            self.H_x = (max(self.x_profile.norm[self.__l_ix : self.__r_ix+1])-min(self.x_profile.norm[self.__l_ix : self.__r_ix+1]))/self.D0_x 
+            self.plateau_limits_x = np.array([self.__l_ix, self.__r_ix])
+              
+       if AXIS =="Y":
+            #--- find index/limits inside 0.8 of the FWHM
+            self.__l_iy  = self.find_closest_index(self.position.y, self.position.y[self.HW_y[0]*0.8 < self.position.y][0])
+            self.__r_iy  = self.find_closest_index(self.position.y, self.position.y[self.HW_y[1]*0.8 < self.position.y][0])
+            #--- caluclate homgeinity defined as (D_may-Dmin)/D0                 
+            self.H_y = (max(self.y_profile.norm[self.__l_iy : self.__r_iy+1])-min(self.y_profile.norm[self.__l_iy : self.__r_iy+1]))/self.D0_y 
+            self.plateau_limits_y = np.array([self.__l_iy, self.__r_iy])
+          
+    def __set_symmetry(self, AXIS): 
+        """Assumes voxels have constant width and are symmetric around 0 -> otherwise linear interpolation on a fixed grid would be necessary"""
+        if AXIS =="X":
+            ix_0 = self.find_closest_index(self.position.x, 0) #get index at x=0 then calculate abs(D(x)-D(-x))
+            N = (min([ix_0-self.__l_ix, self.__r_ix-ix_0])) # Number of steps for which to calculate the Difference
+            delta_D = [abs(self.x_profile.norm[ix_0-i]-self.x_profile.norm[ix_0+i]) for i in range(1,N+1)]
+            self.S_x = max(delta_D)/self.D0_x
+                
+        if AXIS =="Y":
+            ix_0 = self.find_closest_index(self.position.y, 0) # get index at x=0 then calculate abs(D(x)-D(-x))
+            N = (min([ix_0-self.__l_iy, self.__r_iy-ix_0]))    # Number of steps for which to calculate the Difference
+            delta_D = [abs(self.y_profile.norm[ix_0-i]-self.y_profile.norm[ix_0+i]) for i in range(1,N+1)]
+            self.S_y = max(delta_D)/self.D0_y
         
-    def set_plateau_limits(self, AXIS): #hier ist wahrscheinlich eine lineare interpolation besser geeignet !
-        match AXIS:
-            case "X":
-                self.plateau_limits_x = self.position.x[self.x_profile.norm>80][[0, -1]]
+    def __set_dCAX(self, AXIS):
+       if AXIS =="X":
+           self.dCAX_x = self.HW_x[0] + (self.HW_x[1] - self.HW_x[0])/2
+       if AXIS =="Y":
+           self.dCAX_y = self.HW_y[0] + (self.HW_y[1] - self.HW_y[0])/2
     
-            case "Y":
-                self.plateau_limits_y = self.position.y[self.y_profile.norm>80][[0, -1]]
-            
-    def set_penumbra_limits(self, AXIS):
-        match AXIS:
-            case "X":
-                self.penumbra_limits_x =  self.position.x[self.x_profile.norm>20][[0, -1]]
-    
-            case "Y":
-                self.penumbra_limits_y = self.position.y[self.y_profile.norm>20][[0, -1]]      
-    
-    def set_homogeneity(self, AXIS):
-        match AXIS:
-            case "X":
-                self.__l_ix = self.find_closest_index(self.position.x, self.plateau_limits_x[0])
-                self.__r_ix= self.find_closest_index(self.position.x, self.plateau_limits_x[1])
-                self.H_x = (max(self.x_profile.norm[self.__l_ix : self.__r_ix+1]) - min(self.x_profile.norm[self.__l_ix : self.__r_ix+1]))/self.D0_x    
-            
-            case "Y":
-                self.__l_iy = self.find_closest_index(self.position.y, self.plateau_limits_y[0])
-                self.__r_iy= self.find_closest_index(self.position.y, self.plateau_limits_y[1])
-                self.H_y = (max(self.y_profile.norm[self.__l_iy : self.__r_iy+1]) - min(self.y_profile.norm[self.__l_iy : self.__r_iy+1]))/self.D0_y
-    
-        
-    def set_halfwidth(self, AXIS):
-        match AXIS:
-            case "X":
-                self.HW_x = self.position.x[self.x_profile.norm>50][-1]-self.position.x[self.x_profile.norm>50][0]
-            
-            case "Y":
-                self.HW_y = self.position.y[self.y_profile.norm>50][-1]-self.position.y[self.y_profile.norm>50][0]
-                
-            
-    #hier die enden interpolieren das es bei 80 ist das maximum zu suchen
-    def set_symmetry(self, AXIS):
-        match AXIS:
-            case "X":    
-                ix_0 = self.find_closest_index(self.position.x, 0) #das hier zu null interpolieren wenn null kein wert ist !
-                #--- for D>80 find the biggest difference betweene values at same distances
-                delta_D = [abs(self.x_profile.norm[ix_0-i]-self.x_profile.norm[ix_0+i]) for i in range(1,min([ix_0 - self.__l_ix, self.__r_ix -ix_0])+1)]
-                self.S_x = max(delta_D)/self.x_profile.norm[ix_0]
-                
-            case "Y":
-                ix_0 = self.find_closest_index(self.position.y, 0) #das hier zu null interpolieren wenn null kein wert ist !
-                #--- for D>80 find the biggest difference betweene values at same distances
-                delta_D = [abs(self.y_profile.norm[ix_0-i]-self.y_profile.norm[ix_0+i]) for i in range(1,min([ix_0 - self.__l_iy, self.__r_iy -ix_0])+1)]
-                self.S_y = max(delta_D)/self.y_profile.norm[ix_0]
-            
-            
-    def set_dCAX(self, AXIS):
-        match AXIS:
-            case "X":
-                self.dCAX_x = self.position.x[self.__l_ix] + self.HW_x/2
-                
-            case"Y":
-                self.dCAX_y = self.position.y[self.__l_iy] + self.HW_y/2
-                
-    
-    # TODO Tomorrow!
-    # Bei jeder Funktion die interpoliert werden muss die Flag TODO! setzten !
-    # linear interpolation
-    # die ganzen set funktionen privat machen mit __
-    # testen ob auch die einzelnen funktionen klappen und neu kompilieren als version 1.2
-    # example erweitern
     
     
 class dose_3d(dose_object):
@@ -358,7 +429,10 @@ class dose_3d(dose_object):
             y_index = self.find_closest_index(self.position.y, Y)
             self.pdd = normable_array(self.dose_matrix[:, y_index, x_index])
             self.pdd_error = self.error_matrix[:, y_index, x_index]
-            dose_object.set_pdd_metrics(self)
+         
+            if len(self.pdd) > 1: #when reading multiple 3ddose files this makes sure profile metrics are set correctly
+                self.set_pdd_metrics()
+                
             if not MUTE:
                 print(f"Loaded Z-Profile/PDD perpendicular to XY-plane going through the Voxel at (X,Y)=({self.position.x[x_index]},{self.position.y[y_index]})!\n")
         else:
@@ -385,6 +459,7 @@ class dose_3d(dose_object):
         else:
             raise TypeError("The Parameters Z and Y accept only integer and Float values !")
         
+        #--- indices to dose at 10
         
     def set_y_profile(self, Z=0, X=0, MUTE=False):
         """ default depth for doseprofile is 5cm"""
@@ -608,7 +683,7 @@ class dose_mcc(dose_object):
                 self.all_scans[i].ERROR= np.array([np.nan for i in self.all_scans[i].DOSE])
             #--- invert data such that coordinate systems match !
             if "-" in self.all_scans[i].AXIS:
-                self.all_scans[i].POSITION = self.all_scans[i].POSITION[::-1]*-1 #necessary if scan is not symmetric !
+                self.all_scans[i].POSITION = self.all_scans[i].POSITION[:-1]*-1 #necessary if scan is not symmetric !
                 self.all_scans[i].DOSE = normable_array(self.all_scans[i].DOSE[::-1])
                 self.all_scans[i].ERROR = self.all_scans[i].ERROR[::-1]
                 #after fixing coordinate set axis label -X/-Y/-Z -> X/Y/Z
@@ -726,57 +801,85 @@ class dose_mcc(dose_object):
  To save a profile one can just use the Pandas Datafram class e.g pd.DataFrame(dose_3d_object.y_profile).to_csv(destination_path)      
 ##############################################################################"""  
 
-# compare relative profiles 
-def compare_profiles( dose_objects, labels, axes=["Z", "X", "Y"]):
-    """
-        A function that return a plot that can be added
-    
-    """
-    pass
-    
-    
-    
+
+#######################
+#
+# Testing
+#
+#######################
+# teste sowohl chamber als auch dosxyz 3ddose results
+path = "/home/marvin/Desktop/master"
+path = "C:/Users/apel04/Desktop/master"
+
+test_exp = dose_mcc(path+"/Messungen/6MeV_10x10_Dose_Profiles/profiles_@_5cm_ff_and_fff_SSD_100/FF/combined_ff.mcc")
+
+if True:
+    test_dosy = dose_3d(path+"/Simulationen/DATA/TEST_PTB/DOSXYZ_NRC/PTB_6MV_old_dosxyz.3ddose")
+
+if True:
+    test_chamber = dose_3d(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_pdd.3ddose")
+    test_chamber.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_x_profile.3ddose", AXIS="X")
+    test_chamber.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_y_profile.3ddose", AXIS="Y") 
 
 
+####################
+# Z-Profile metrics
+####################
+if False:
+    fig, axs = plt.subplots(1,3, figsize=(30,10))
+    axs[0].set_ylim(20, 101)
+    axs[1].set_ylim(20, 101)
+    axs[2].set_ylim(20, 101)
+    #--- PDD-Test Metrics   
+    # Experimental
+    axs[0].plot(test_exp.position.z, test_exp.pdd.norm, label=f"Experiment Q: {test_exp.Q}")
+    axs[0].scatter([0, 10, 20, test_exp.Rmax], [test_exp.D0, test_exp.D10, test_exp.D20, 100])
+    axs[0].legend(loc="lower left", fontsize=20)
+    # DOSXYZ_NRC
+    axs[1].plot(test_dosy.position.z, test_dosy.pdd.norm, label=f"DOSXYZ_NRC Q: {test_dosy.Q}")
+    axs[1].scatter([0, 10, 20, test_dosy.Rmax], [test_dosy.D0, test_dosy.D10, test_dosy.D20, 100])
+    axs[1].legend(loc="lower left", fontsize=20)
+    # EGS_CHAMBER
+    axs[2].plot(test_dosy.position.z, test_dosy.pdd.norm, label=f"EGS_CHAMBER Q: {test_dosy.Q}")
+    axs[2].scatter([0, 10, 20, test_dosy.Rmax], [test_dosy.D0, test_dosy.D10, test_dosy.D20, 100])
+    axs[2].legend(loc="lower left", fontsize=20)
 
-
-
+####################
+# X-Profile metrics
+####################    
+names = ["Experiment", "DOSXYZ_NRC", "EGS_CHAMBER"]
+if True:
+    fig, axs = plt.subplots(1,3, figsize=(30,10))
+    for i, dose in enumerate([test_exp, test_dosy, test_chamber]):
+        label = f"{names[i]}\n    H = {round(dose.H_x,3)}\n    S = {round(dose.S_x,3)}\nCAX = {round(dose.dCAX_x,3)}"
+        print(dose.position.x.shape, dose.x_profile.shape)
+        #axs[i].scatter(dose.position.x, dose.x_profile.norm, facecolor="white",edgecolor="black", marker="o", label=label)
+        #axs[i].plot(dose.HW_x, [50,50], c="red")
+        #axs[i].plot([dose.penumbra_limits_x_20[0], dose.penumbra_limits_x_80[0]], [20,80], c="red", lw=2)
+        #axs[i].plot([dose.penumbra_limits_x_20[1], dose.penumbra_limits_x_80[1]], [20,80], c="red", lw=2)
+        #axs[i].plot([dose.dCAX_x, dose.dCAX_x], [-1, 103])
+        #axs[i].plot(dose.position.x[dose.plateau_limits_x], [100, 100], lw=4, c="blue")
+        #axs[i].set_ylim(0, 101)
+        #axs[i].legend(loc="lower center", fontsize=25)
+                
+####################
+# Y-Profile metrics
+####################
+names = ["Experiment", "DOSXYZ_NRC", "EGS_CHAMBER"]
+if False:
+    fig, axs = plt.subplots(1,3, figsize=(30,10))
+    for i, dose in enumerate([test_exp, test_dosy, test_chamber]):
+        label = f"{names[i]}\n    H = {round(dose.H_y,3)}\n    S = {round(dose.S_y,3)}\nCAX = {round(dose.dCAX_y,3)}"
+        axs[i].scatter(dose.position.y, dose.y_profile.norm, facecolor="white",edgecolor="black", marker="o", label=label)
+        axs[i].plot(dose.HW_y, [50,50], c="red")
+        axs[i].plot([dose.penumbra_limits_y_20[0], dose.penumbra_limits_y_80[0]], [20,80], c="red", lw=2)
+        axs[i].plot([dose.penumbra_limits_y_20[1], dose.penumbra_limits_y_80[1]], [20,80], c="red", lw=2)
+        axs[i].plot([dose.dCAX_y, dose.dCAX_y], [-1, 103])
+        axs[i].plot(dose.position.y[dose.plateau_limits_y], [100, 100], lw=4, c="blue")
+        axs[i].set_ylim(0, 101)
+        axs[i].legend(loc="lower center", fontsize=25)
+        
 # =============================================================================
-# 
-# 
-# 
-# #######################
-# #
-# # Testing
-# #
-# #######################
-# # teste sowohl chamber als auch dosxyz 3ddose results
-# #path = "C:/Users/apel04/Desktop/master"
-# path = "/home/marvin/Desktop/master"
-# 
-# test_mcc = dose_mcc(path+"/Messungen/6MeV_10x10_Dose_Profiles/profiles_@_5cm_ff_and_fff_SSD_100/FF/combined_ff.mcc")
-# 
-# 
-# 
-# if True:
-#     test_3d = dose_3d(path+"/Simulationen/DATA/TEST_PTB/DOSXYZ_NRC/PTB_6MV_old_dosxyz.3ddose")
-# 
-# else:
-#     test_3d = dose_3d(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_pdd.3ddose")
-#     test_3d.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_x_profile.3ddose", AXIS="X")
-#     test_3d.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_y_profile.3ddose", AXIS="Y")
-# 
-# 
-# #pdd metrics
-# print("Z-Axis")
-# print(test_3d.pdd_max_abs , test_mcc.pdd_max_abs)
-# print(test_3d.pdd_i_max   , test_mcc.pdd_i_max)
-# print(test_3d.Rmax, test_mcc.Rmax)
-# print(test_3d.D0, test_mcc.D0)
-# print(test_3d.D10, test_mcc.D10)
-# print(test_3d.D20, test_mcc.D20)
-# print(test_3d.Q, test_mcc.Q)
-# 
 # #profile Metrics - X
 # print("\n\nX-Axis")
 # print(test_3d.D0_x, test_mcc.D0_x)
@@ -798,63 +901,4 @@ def compare_profiles( dose_objects, labels, axes=["Z", "X", "Y"]):
 # print(test_3d.S_y, test_mcc.S_y)
 # print(test_3d.dCAX_y, test_mcc.dCAX_y)
 # 
-# =============================================================================
-
-
-# =============================================================================
-# # %%
-# print(test_3d.D0_x)
-# # %%
-# print(test_mcc.D0_x)
-# 
-# 
-# =============================================================================
-
-
-# =============================================================================
-# 
-# # ---
-# fig, ax = plt.subplots(1,1, figsize=(20,20))
-# plt.scatter(test.position.x, test.x_profile.norm, c="blue")
-# plt.plot(test.position.x, test.x_profile.norm, c="blue")
-# #--- Plateau
-# plt.plot(test.plateau_limits_x, [80,80], c="lightgreen")
-# 
-# 
-# 
-# #--- Penumbra
-# plt.plot(test.penumbra_limits_x, [20,20], c="red")
-# 
-# 
-# test.plateau_limits_x
-# =============================================================================
-
-
-# =============================================================================
-# print("Dose at center: ", test.D0_x, test.D0_y)
-# print("dose < 20 outside: ",test.penumbra_limits_x, test.penumbra_limits_y)
-# print("dose > 80 inside: ",test.plateau_limits_x, test.plateau_limits_y)
-# print("Homogeniety: ",test.H_x, test.H_y)
-# print("Halfwidth: ",test.HW_x, test.HW_y)
-# print("Symmetry: ",test.S_x, test.S_y)
-# print("Central Axis deviation: ",test.dCAX_x, test.dCAX_y)
-# =============================================================================
-
-
-
-
-# =============================================================================
-# #--- In Examples hinzufügen !
-# # %
-# fig, ax = plt.subplots(1,1, figsize=(20,20))
-# plt.plot(test.position.z, test.pdd.norm)
-# plt.scatter(test.Rmax, 100, marker="o", c="blue", s=70)
-# # R0
-# plt.scatter(test.position.z[0], test.D0, marker="o", c="blue", s=70)
-# # R10
-# plt.scatter(test.position.z[test.i_10:test.i_10+2], test.pdd.norm[test.i_10:test.i_10+2], marker="o", c="blue", s=70)
-# plt.scatter(10, test.D10, marker="x", c="red", s=70)
-# # R20
-# plt.scatter(test.position.z[test.i_20:test.i_20+2], test.pdd.norm[test.i_20:test.i_20+2], marker="o", c="blue", s=70)
-# plt.scatter(20, test.D20, marker="x", c="red", s=70)
 # =============================================================================
