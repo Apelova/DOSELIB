@@ -6,9 +6,9 @@
         	~ python3 setup.py bdist_wheel
 
 # 2. Import the package by using either 
-	from egs_doselib import * 
+	from doselib import * 
 	or
-	import egs_doselib as dl
+	import doselib as dl
 	
 # 3. Available Classes are:
  	- dose_3d (equivalent to statdose)

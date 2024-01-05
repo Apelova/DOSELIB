@@ -5,7 +5,7 @@ A few examples that show how to use the egs_doselib!
 In Order to analyse them comment change the if Statements of each block.
 """
 #--- Import all classees and methods from egs_doselib!
-from egs_doselib import *
+from doselib import *
 
 #--- Import data
 import matplotlib.pyplot as plt #to visualize data
@@ -216,3 +216,97 @@ if False:
 #    If there are any Bugs please report the issue at the GitHub repository
 #               https://github.com/Apelova/EGS_DOSE_TOOLS
 ###############################################################################
+if False:
+    
+path = "/home/marvin/Desktop/master"
+path = "C:/Users/apel04/Desktop/master"
+    #--- read Experimental Data fron .mcc
+    test_exp = dose_mcc(path+"/Messungen/6MeV_10x10_Dose_Profiles/profiles_@_5cm_ff_and_fff_SSD_100/FF/combined_ff.mcc")
+    #--- read DOSXYZ results
+    test_dosy = dose_3d(path+"/Simulationen/DATA/TEST_PTB/DOSXYZ_NRC/ROUGH_GRID/PTB_6MV_old_dosxyz.3ddose")
+    #--- read EGS_CHAMBER RESULTS
+    test_chamber = dose_3d(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_pdd.3ddose")
+    test_chamber.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_x_profile.3ddose", AXIS="X")
+    test_chamber.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_y_profile.3ddose", AXIS="Y") 
+
+# %
+####################
+# Z-Profile metrics
+####################
+if False:
+    fig, axs = plt.subplots(1,3, figsize=(30,10))
+    axs[0].set_ylim(20, 101)
+    axs[1].set_ylim(20, 101)
+    axs[2].set_ylim(20, 101)
+    #--- PDD-Test Metrics   
+    # Experimental
+    axs[0].plot(test_exp.position.z, test_exp.pdd.norm, label=f"Experiment Q: {test_exp.Q}")
+    axs[0].scatter([0, 10, 20, test_exp.Rmax], [test_exp.D0, test_exp.D10, test_exp.D20, 100])
+    axs[0].legend(loc="lower left", fontsize=20)
+    # DOSXYZ_NRC
+    axs[1].plot(test_dosy.position.z, test_dosy.pdd.norm, label=f"DOSXYZ_NRC Q: {test_dosy.Q}")
+    axs[1].scatter([0, 10, 20, test_dosy.Rmax], [test_dosy.D0, test_dosy.D10, test_dosy.D20, 100])
+    axs[1].legend(loc="lower left", fontsize=20)
+    # EGS_CHAMBER
+    axs[2].plot(test_dosy.position.z, test_dosy.pdd.norm, label=f"EGS_CHAMBER Q: {test_dosy.Q}")
+    axs[2].scatter([0, 10, 20, test_dosy.Rmax], [test_dosy.D0, test_dosy.D10, test_dosy.D20, 100])
+    axs[2].legend(loc="lower left", fontsize=20)
+
+####################
+# X-Profile metrics
+####################    
+names = ["Experiment", "DOSXYZ_NRC", "EGS_CHAMBER"]
+if False:
+    fig, axs = plt.subplots(1,3, figsize=(30,10))
+    for i, dose in enumerate([test_exp, test_dosy, test_chamber]):
+        label = f"{names[i]}\n    H = {round(dose.H_x,3)}\n    S = {round(dose.S_x,3)}\nCAX = {round(dose.dCAX_x,3)}"
+        print(dose.position.x.shape, dose.x_profile.shape)
+        #axs[i].scatter(dose.position.x, dose.x_profile.norm, facecolor="white",edgecolor="black", marker="o", label=label)
+        #axs[i].plot(dose.HW_x, [50,50], c="red")
+        #axs[i].plot([dose.penumbra_limits_x_20[0], dose.penumbra_limits_x_80[0]], [20,80], c="red", lw=2)
+        #axs[i].plot([dose.penumbra_limits_x_20[1], dose.penumbra_limits_x_80[1]], [20,80], c="red", lw=2)
+        #axs[i].plot([dose.dCAX_x, dose.dCAX_x], [-1, 103])
+        #axs[i].plot(dose.position.x[dose.plateau_limits_x], [100, 100], lw=4, c="blue")
+        #axs[i].set_ylim(0, 101)
+        #axs[i].legend(loc="lower center", fontsize=25)
+                
+####################
+# Y-Profile metrics
+####################
+names = ["Experiment", "DOSXYZ_NRC", "EGS_CHAMBER"]
+if False:
+    fig, axs = plt.subplots(1,3, figsize=(30,10))
+    for i, dose in enumerate([test_exp, test_dosy, test_chamber]):
+        label = f"{names[i]}\n    H = {round(dose.H_y,3)}\n    S = {round(dose.S_y,3)}\nCAX = {round(dose.dCAX_y,3)}"
+        axs[i].scatter(dose.position.y, dose.y_profile.norm, facecolor="white",edgecolor="black", marker="o", label=label)
+        axs[i].plot(dose.HW_y, [50,50], c="red")
+        axs[i].plot([dose.penumbra_limits_y_20[0], dose.penumbra_limits_y_80[0]], [20,80], c="red", lw=2)
+        axs[i].plot([dose.penumbra_limits_y_20[1], dose.penumbra_limits_y_80[1]], [20,80], c="red", lw=2)
+        axs[i].plot([dose.dCAX_y, dose.dCAX_y], [-1, 103])
+        axs[i].plot(dose.position.y[dose.plateau_limits_y], [100, 100], lw=4, c="blue")
+        axs[i].set_ylim(0, 101)
+        axs[i].legend(loc="lower center", fontsize=25)
+        
+# =============================================================================
+# #profile Metrics - X
+# print("\n\nX-Axis")
+# print(test_3d.D0_x, test_mcc.D0_x)
+# print(test_3d.plateau_limits_x, test_mcc.plateau_limits_x)
+# print(test_3d.penumbra_limits_x, test_mcc.penumbra_limits_x)
+# print(test_3d.H_x, test_mcc.H_x)
+# print(test_3d.HW_x, test_mcc.HW_x)
+# print(test_3d.S_x, test_mcc.S_x)
+# print(test_3d.dCAX_x, test_mcc.dCAX_x)
+# 
+# 
+# #profile Metrics - y
+# print("\n\ny-Axis")
+# print(test_3d.D0_y, test_mcc.D0_y)
+# print(test_3d.plateau_limits_y, test_mcc.plateau_limits_y)
+# print(test_3d.penumbra_limits_y, test_mcc.penumbra_limits_y)
+# print(test_3d.H_y, test_mcc.H_y)
+# print(test_3d.HW_y, test_mcc.HW_y)
+# print(test_3d.S_y, test_mcc.S_y)
+# print(test_3d.dCAX_y, test_mcc.dCAX_y)
+# 
+# =============================================================================
