@@ -110,12 +110,11 @@ class dose_object:
         return idx 
     
     def __get_interpol_indices(self, z):
-        match z:
-            case 10:
-                l_ix, r_ix = self.i_10, self.i_10
+        if z==10:
+            l_ix, r_ix = self.i_10, self.i_10
 
-            case 20:
-                l_ix, r_ix = self.i_20, self.i_20
+        if z==20:
+            l_ix, r_ix = self.i_20, self.i_20
 
         while self.position.z[l_ix] > z:
             l_ix -= 1
@@ -177,21 +176,20 @@ class dose_object:
         self.__set_halfwidth(AXIS)
         self.__set_dCAX(AXIS)
         self.__set_homogeneity(AXIS)
-        self.__set_symmetry(AXIS)
+        #self.__set_symmetry(AXIS)
         
     def __set_Dose_on_axis(self, AXIS): #hier muss man eigentlich auch interpolieren !
         """ it is expected that dose the profiles include 0 !!"""
-        match AXIS:
-            case "X":
-                self.D0_x = self.x_profile.norm[self.find_closest_index(self.position.x, 0)]
+        if AXIS =="X":
+            self.D0_x = self.x_profile.norm[self.find_closest_index(self.position.x, 0)]
     
-            case "Y":
-                self.D0_y = self.y_profile.norm[self.find_closest_index(self.position.y, 0)]
+        if AXIS =="Y":
+            self.D0_y = self.y_profile.norm[self.find_closest_index(self.position.y, 0)]
             
     def get_limits_from_interpolation(self, position, dose_array, dose_value, degree="linear"):
         """ Used for FWHM, 20%, 80% -> Penumbra widths"""
-        l_ix = self.find_closest_index(position, position[dose_array > dose_value][0])
-        r_ix = self.find_closest_index(position, position[dose_array > dose_value][-1])
+        l_ix = self.find_closest_index(dose_array, dose_array[dose_array > dose_value][0])
+        r_ix = self.find_closest_index(dose_array, dose_array[dose_array > dose_value][-1])
         #--- get linear functions for interpolation
         if degree == "linear":
             f_l = interpolate.interp1d(position[[l_ix-1, l_ix]], dose_array[[l_ix-1, l_ix]], fill_value='extrapolate', kind="linear")
@@ -212,86 +210,79 @@ class dose_object:
         return np.array([x_l[0], x_r[0]]) #return left and right value
 
     def __set_halfwidth(self, AXIS):
-        match AXIS:
-            case "X":
-                x_l, x_r = self.get_limits_from_interpolation(self.position.x, self.x_profile.norm, 50, degree = "quadratic")
-                #--- store outer limtis                
-                self.HW_x = np.array([x_l, x_r])
+       if AXIS =="X":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.x, self.x_profile.norm, 50, degree = "quadratic")
+            #--- store outer limtis                
+            self.HW_x = np.array([x_l, x_r])
      
-            case "Y":
-                x_l, x_r = self.get_limits_from_interpolation(self.position.y, self.y_profile.norm, 50, degree = "quadratic")
-                #--- store outer limtis                
-                self.HW_y = np.array([x_l, x_r])    
+       if AXIS =="Y":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.y, self.y_profile.norm, 50, degree = "quadratic")
+            #--- store outer limtis                
+            self.HW_y = np.array([x_l, x_r])    
 
     def __set_penumbra_limits_80(self, AXIS): #hier ist wahrscheinlich eine lineare interpolation besser geeignet !
         # Hier die werte für x==80 prozent her holen
-        match AXIS:
-            case "X":
-                x_l, x_r = self.get_limits_from_interpolation(self.position.x, self.x_profile.norm, 80, degree = "quadratic")
-                self.penumbra_limits_x_80 = np.array([x_l, x_r])
+       if AXIS =="X":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.x, self.x_profile.norm, 80, degree = "quadratic")
+            self.penumbra_limits_x_80 = np.array([x_l, x_r])
                 
-            case "Y":
-                x_l, x_r = self.get_limits_from_interpolation(self.position.y, self.y_profile.norm, 80, degree = "quadratic")
-                self.penumbra_limits_y_80 = np.array([x_l, x_r])
-                            
+       if AXIS =="Y":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.y, self.y_profile.norm, 80, degree = "quadratic")
+            self.penumbra_limits_y_80 = np.array([x_l, x_r])
+                        
     def __set_penumbra_limits_20(self, AXIS):
-        match AXIS:
-            case "X":
-                x_l, x_r = self.get_limits_from_interpolation(self.position.x, self.x_profile.norm, 20, degree="quadratic")
-                self.penumbra_limits_x_20 = np.array([x_l, x_r])
+       if AXIS =="X":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.x, self.x_profile.norm, 20, degree="quadratic")
+            self.penumbra_limits_x_20 = np.array([x_l, x_r])
     
-            case "Y":
-                x_l, x_r = self.get_limits_from_interpolation(self.position.y, self.y_profile.norm, 20, degree="quadratic")
-                self.penumbra_limits_y_20 = np.array([x_l, x_r])
+       if AXIS =="Y":
+            x_l, x_r = self.get_limits_from_interpolation(self.position.y, self.y_profile.norm, 20, degree="quadratic")
+            self.penumbra_limits_y_20 = np.array([x_l, x_r])
 
     def __set_penumbra_width(self, AXIS):
-        match AXIS:
-            case "X":
-                self.penumbra_xl= self.penumbra_limits_x_80[0]-self.penumbra_limits_x_20[0]
-                self.penumbra_xr= self.penumbra_limits_x_20[1]-self.penumbra_limits_x_80[1]
-            case "Y":
-                self.penumbra_yl= self.penumbra_limits_y_80[0]-self.penumbra_limits_y_20[0]
-                self.penumbra_yr= self.penumbra_limits_y_20[1]-self.penumbra_limits_y_80[1]
+       if AXIS =="X":
+            self.penumbra_xl= self.penumbra_limits_x_80[0]-self.penumbra_limits_x_20[0]
+            self.penumbra_xr= self.penumbra_limits_x_20[1]-self.penumbra_limits_x_80[1]
+       if AXIS =="Y":
+            self.penumbra_yl= self.penumbra_limits_y_80[0]-self.penumbra_limits_y_20[0]
+            self.penumbra_yr= self.penumbra_limits_y_20[1]-self.penumbra_limits_y_80[1]
 
     def __set_homogeneity(self, AXIS): 
-        match AXIS:
-            case "X":
-                #--- find index/limits inside 0.8 of the FWHM
-                self.__l_ix  = self.find_closest_index(self.position.x, self.position.x[self.HW_x[0]*0.8 < self.position.x][0])
-                self.__r_ix  = self.find_closest_index(self.position.x, self.position.x[self.HW_x[1]*0.8 < self.position.x][0])
-                #--- caluclate homgeinity defined as (D_max-Dmin)/D0                 
-                self.H_x = (max(self.x_profile.norm[self.__l_ix : self.__r_ix+1])-min(self.x_profile.norm[self.__l_ix : self.__r_ix+1]))/self.D0_x 
-                self.plateau_limits_x = np.array([self.__l_ix, self.__r_ix])
+       if AXIS =="X":
+            #--- find index/limits inside 0.8 of the FWHM
+            self.__l_ix  = self.find_closest_index(self.position.x, self.position.x[self.HW_x[0]*0.8 < self.position.x][0])
+            self.__r_ix  = self.find_closest_index(self.position.x, self.position.x[self.HW_x[1]*0.8 < self.position.x][0])
+            #--- caluclate homgeinity defined as (D_max-Dmin)/D0                 
+            self.H_x = (max(self.x_profile.norm[self.__l_ix : self.__r_ix+1])-min(self.x_profile.norm[self.__l_ix : self.__r_ix+1]))/self.D0_x 
+            self.plateau_limits_x = np.array([self.__l_ix, self.__r_ix])
               
-            case "Y":
-                #--- find index/limits inside 0.8 of the FWHM
-                self.__l_iy  = self.find_closest_index(self.position.y, self.position.y[self.HW_y[0]*0.8 < self.position.y][0])
-                self.__r_iy  = self.find_closest_index(self.position.y, self.position.y[self.HW_y[1]*0.8 < self.position.y][0])
-                #--- caluclate homgeinity defined as (D_may-Dmin)/D0                 
-                self.H_y = (max(self.y_profile.norm[self.__l_iy : self.__r_iy+1])-min(self.y_profile.norm[self.__l_iy : self.__r_iy+1]))/self.D0_y 
-                self.plateau_limits_y = np.array([self.__l_iy, self.__r_iy])
-              
+       if AXIS =="Y":
+            #--- find index/limits inside 0.8 of the FWHM
+            self.__l_iy  = self.find_closest_index(self.position.y, self.position.y[self.HW_y[0]*0.8 < self.position.y][0])
+            self.__r_iy  = self.find_closest_index(self.position.y, self.position.y[self.HW_y[1]*0.8 < self.position.y][0])
+            #--- caluclate homgeinity defined as (D_may-Dmin)/D0                 
+            self.H_y = (max(self.y_profile.norm[self.__l_iy : self.__r_iy+1])-min(self.y_profile.norm[self.__l_iy : self.__r_iy+1]))/self.D0_y 
+            self.plateau_limits_y = np.array([self.__l_iy, self.__r_iy])
+          
     def __set_symmetry(self, AXIS): 
         """Assumes voxels have constant width and are symmetric around 0 -> otherwise linear interpolation on a fixed grid would be necessary"""
-        match AXIS:
-            case "X":    
-                ix_0 = self.find_closest_index(self.position.x, 0) #get index at x=0 then calculate abs(D(x)-D(-x))
-                N = (min([ix_0-self.__l_ix, self.__r_ix-ix_0])) # Number of steps for which to calculate the Difference
-                delta_D = [abs(self.x_profile.norm[ix_0-i]-self.x_profile.norm[ix_0+i]) for i in range(1,N+1)]
-                self.S_x = max(delta_D)/self.D0_x
+        if AXIS =="X":
+            ix_0 = self.find_closest_index(self.position.x, 0) #get index at x=0 then calculate abs(D(x)-D(-x))
+            N = (min([ix_0-self.__l_ix, self.__r_ix-ix_0])) # Number of steps for which to calculate the Difference
+            delta_D = [abs(self.x_profile.norm[ix_0-i]-self.x_profile.norm[ix_0+i]) for i in range(1,N+1)]
+            self.S_x = max(delta_D)/self.D0_x
                 
-            case "Y":
-                ix_0 = self.find_closest_index(self.position.y, 0) # get index at x=0 then calculate abs(D(x)-D(-x))
-                N = (min([ix_0-self.__l_iy, self.__r_iy-ix_0]))    # Number of steps for which to calculate the Difference
-                delta_D = [abs(self.y_profile.norm[ix_0-i]-self.y_profile.norm[ix_0+i]) for i in range(1,N+1)]
-                self.S_y = max(delta_D)/self.D0_y
-            
+        if AXIS =="Y":
+            ix_0 = self.find_closest_index(self.position.y, 0) # get index at x=0 then calculate abs(D(x)-D(-x))
+            N = (min([ix_0-self.__l_iy, self.__r_iy-ix_0]))    # Number of steps for which to calculate the Difference
+            delta_D = [abs(self.y_profile.norm[ix_0-i]-self.y_profile.norm[ix_0+i]) for i in range(1,N+1)]
+            self.S_y = max(delta_D)/self.D0_y
+        
     def __set_dCAX(self, AXIS):
-        match AXIS:
-            case "X":
-                self.dCAX_x = self.HW_x[0] + (self.HW_x[1] - self.HW_x[0])/2
-            case"Y":
-                self.dCAX_y = self.HW_y[0] + (self.HW_y[1] - self.HW_y[0])/2
+       if AXIS =="X":
+           self.dCAX_x = self.HW_x[0] + (self.HW_x[1] - self.HW_x[0])/2
+       if AXIS =="Y":
+           self.dCAX_y = self.HW_y[0] + (self.HW_y[1] - self.HW_y[0])/2
     
     
     
@@ -692,7 +683,7 @@ class dose_mcc(dose_object):
                 self.all_scans[i].ERROR= np.array([np.nan for i in self.all_scans[i].DOSE])
             #--- invert data such that coordinate systems match !
             if "-" in self.all_scans[i].AXIS:
-                self.all_scans[i].POSITION = self.all_scans[i].POSITION[::-1]*-1 #necessary if scan is not symmetric !
+                self.all_scans[i].POSITION = self.all_scans[i].POSITION[:-1]*-1 #necessary if scan is not symmetric !
                 self.all_scans[i].DOSE = normable_array(self.all_scans[i].DOSE[::-1])
                 self.all_scans[i].ERROR = self.all_scans[i].ERROR[::-1]
                 #after fixing coordinate set axis label -X/-Y/-Z -> X/Y/Z
@@ -817,10 +808,11 @@ class dose_mcc(dose_object):
 #
 #######################
 # teste sowohl chamber als auch dosxyz 3ddose results
-path = "C:/Users/apel04/Desktop/master"
 path = "/home/marvin/Desktop/master"
+path = "C:/Users/apel04/Desktop/master"
 
 test_exp = dose_mcc(path+"/Messungen/6MeV_10x10_Dose_Profiles/profiles_@_5cm_ff_and_fff_SSD_100/FF/combined_ff.mcc")
+
 if True:
     test_dosy = dose_3d(path+"/Simulationen/DATA/TEST_PTB/DOSXYZ_NRC/PTB_6MV_old_dosxyz.3ddose")
 
@@ -829,7 +821,7 @@ if True:
     test_chamber.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_x_profile.3ddose", AXIS="X")
     test_chamber.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRID/PTB_6MeVp_10x10_old_dose_y_profile.3ddose", AXIS="Y") 
 
-# %%
+
 ####################
 # Z-Profile metrics
 ####################
@@ -856,24 +848,25 @@ if False:
 # X-Profile metrics
 ####################    
 names = ["Experiment", "DOSXYZ_NRC", "EGS_CHAMBER"]
-if False:
+if True:
     fig, axs = plt.subplots(1,3, figsize=(30,10))
     for i, dose in enumerate([test_exp, test_dosy, test_chamber]):
         label = f"{names[i]}\n    H = {round(dose.H_x,3)}\n    S = {round(dose.S_x,3)}\nCAX = {round(dose.dCAX_x,3)}"
-        axs[i].scatter(dose.position.x, dose.x_profile.norm, facecolor="white",edgecolor="black", marker="o", label=label)
-        axs[i].plot(dose.HW_x, [50,50], c="red")
-        axs[i].plot([dose.penumbra_limits_x_20[0], dose.penumbra_limits_x_80[0]], [20,80], c="red", lw=2)
-        axs[i].plot([dose.penumbra_limits_x_20[1], dose.penumbra_limits_x_80[1]], [20,80], c="red", lw=2)
-        axs[i].plot([dose.dCAX_x, dose.dCAX_x], [-1, 103])
-        axs[i].plot(dose.position.x[dose.plateau_limits_x], [100, 100], lw=4, c="blue")
-        axs[i].set_ylim(0, 101)
-        axs[i].legend(loc="lower center", fontsize=25)
+        print(dose.position.x.shape, dose.x_profile.shape)
+        #axs[i].scatter(dose.position.x, dose.x_profile.norm, facecolor="white",edgecolor="black", marker="o", label=label)
+        #axs[i].plot(dose.HW_x, [50,50], c="red")
+        #axs[i].plot([dose.penumbra_limits_x_20[0], dose.penumbra_limits_x_80[0]], [20,80], c="red", lw=2)
+        #axs[i].plot([dose.penumbra_limits_x_20[1], dose.penumbra_limits_x_80[1]], [20,80], c="red", lw=2)
+        #axs[i].plot([dose.dCAX_x, dose.dCAX_x], [-1, 103])
+        #axs[i].plot(dose.position.x[dose.plateau_limits_x], [100, 100], lw=4, c="blue")
+        #axs[i].set_ylim(0, 101)
+        #axs[i].legend(loc="lower center", fontsize=25)
                 
 ####################
 # Y-Profile metrics
 ####################
 names = ["Experiment", "DOSXYZ_NRC", "EGS_CHAMBER"]
-if True:
+if False:
     fig, axs = plt.subplots(1,3, figsize=(30,10))
     for i, dose in enumerate([test_exp, test_dosy, test_chamber]):
         label = f"{names[i]}\n    H = {round(dose.H_y,3)}\n    S = {round(dose.S_y,3)}\nCAX = {round(dose.dCAX_y,3)}"
