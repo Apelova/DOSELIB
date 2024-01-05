@@ -28,9 +28,10 @@ dose_chamber.add_profile(path+"/Simulationen/DATA/TEST_PTB/EGS_CHAMBER/ROUGH_GRI
 #dose_exp = dose_mcc(path+"/Messungen/6MeV_10x10_Dose_Profiles/profiles_@_5cm_ff_and_fff_SSD_100/FF/combined_ff.mcc")
 dose_exp = dose_mcc(path+"/Messungen/6MeV_10x10_Dose_Profiles/profiles_@_5_25cm_ff_SSD_98/all_profiles_scan.mcc")
 
-# %%    
 matplotlib.rc('xtick', labelsize=18) 
 matplotlib.rc('ytick', labelsize=18) 
+
+# %%    
 fig, axs = compare_dose( [dose_exp, dose_chamber, dose_dosy], labels=["Experimental","DOSXYZ_NRC", "EGS_CHAMBER"], axes=["Z", "X", "Y"], difference=True, interpol="quadratic", diff_dx=0.1)
 axs[0,0].legend(loc="lower left", fontsize=30)
 
@@ -47,21 +48,15 @@ axs[1,1].set_yticks(np.arange(-10,15,5))
 axs[1,2].set_ylim(-20,20)
 axs[1,2].set_yticks(np.arange(-20,25,10))
 
-# Testing -> random dose, with and without difference, more axes !
-
-
 # %%
-fig, axs = compare_dose( [dose_exp, dose_dosy, dose_chamber], labels=["Experimental","DOSXYZ_NRC", "EGS_CHAMBER"], axes=["Y", "X"], difference=True, interpol="quadratic", diff_dx=0.01)
-
-
-
-
-
-
-
-
-
-
+###########################################################
+#----------------------------------------------------------
+# Hier unten jetzt die funktionen für die metriken schreiben
+#----------------------------------------------------------
+###########################################################
+fig, axs = plt.subplots(1, 3, figsize=(24,8))
+#axs[0]
+# https://matplotlib.org/3.3.4/gallery/recipes/placing_text_boxes.html
 
 
 
