@@ -4,6 +4,7 @@ doselib.egg-info/SOURCES.txt
 doselib.egg-info/dependency_links.txt
 doselib.egg-info/top_level.txt
 egs_doselib/__init__.py
+egs_doselib/compare_dose.py
 egs_doselib/main.py
 egs_doselib/read_3ddose.py
 egs_doselib/read_agr.py
