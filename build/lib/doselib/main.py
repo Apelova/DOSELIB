@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 import pandas as pd 
 import numpy as np
+import matplotlib
 import os
 
 class _xyz_array_Object:
@@ -84,8 +85,8 @@ class dose_object:
         self.plateau_limits_x= np.nan
         self.penumbra_limits_x_20= np.nan
         self.penumbra_limits_x_80= np.nan
-        self.penumbra_yl= np.nan
-        self.penumbra_yr= np.nan
+        self.penumbra_xl= np.nan
+        self.penumbra_xr= np.nan
         self.H_x= np.nan
         self.HW_x= np.nan
         self.S_x= np.nan
@@ -176,7 +177,7 @@ class dose_object:
         self.__set_halfwidth(AXIS)
         self.__set_dCAX(AXIS)
         self.__set_homogeneity(AXIS)
-        #self.__set_symmetry(AXIS)
+        self.__set_symmetry(AXIS)
         
     def __set_Dose_on_axis(self, AXIS): #hier muss man eigentlich auch interpolieren !
         """ it is expected that dose the profiles include 0 !!"""
@@ -804,7 +805,7 @@ class dose_mcc(dose_object):
  
  To save a profile one can just use the Pandas Datafram class e.g pd.DataFrame(dose_3d_object.y_profile).to_csv(destination_path)      
 ##############################################################################"""  
-
+#TODO ! metrics
 def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=None, colors = ["black", "red", "blue"], interpol="linear", diff_dx=0.1):
     """
         A function that return plot of selected axes.
@@ -814,7 +815,6 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
         
         metrics = "average", "profiles"
         
-        TODO-> elute input
     """    
     def interpolate_arrays(position_array, dose_array, dx=diff_dx, interpol=interpol):
         #--- get position limits
@@ -889,13 +889,13 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
     for col in range(cols):
         #--- print original plots
         if axes[col] == "X":
-            plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile.norm] for each in dose_objects], labels, difference=difference)
+            plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors)
                 
         if axes[col] == "Y":
-            plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile.norm] for each in dose_objects], labels, difference=difference)
+            plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors)
     
         if axes[col] == "Z":
-            plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd.norm] for each in dose_objects], labels, difference=difference)
+            plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd.norm] for each in dose_objects], labels, difference=difference, colors=colors)
 
     #--- add grid
     for i in range(cols):
@@ -921,6 +921,8 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
         axs_[1,0].set
     else:
         axs_[0].set_ylabel("relative Dose [%]", fontsize=18)
-        
+    #---adjust labels
+    matplotlib.rc('xtick', labelsize=18)
+    matplotlib.rc('ytick', labelsize=18)
     #--- return fig and axs
     return fig_, axs_
