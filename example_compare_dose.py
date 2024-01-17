@@ -78,10 +78,13 @@ def get_metric_string(DOSE_OBJ, AXIS, exclude={}):
         output = ""
         if "-0." in substring:
             output += " "
+        elif len(substring) == 4:
+            output +="  "
         elif len(substring)<6:
             output += " "
             if "0." in substring:
                 output += " "                            
+                
         output += substring
         return output
 
@@ -141,68 +144,14 @@ def set_metrics(dose_objs, plot_axs, axes=["Z", "X", "Y"], difference=True, excl
      
 # TODO in the office
 # Incorporate in main
-# Test cells below
-# Test box position when exluding !
+# Test if it works in main !
 
-exludio = {"Z":["D20", "D10"], "X":[], "Y":[]}        
+exludio = {"Z":["D20", "D10"], "X":["D0_x", "dCAX_x"], "Y":[]}        
 axerinios = ["Z", "X", "Y"]
-differencio = False
+differencio = True
 colors_ = colors=["black", "blue"]
-
 fig, axs = compare_dose([dose_exp, dose_chamber], labels=["Experimental","EGS_CHAMBER"], axes=axerinios, difference=differencio, interpol="quadratic", diff_dx=0.1, colors=colors_)
 set_metrics([dose_exp, dose_chamber], axs, axes=axerinios, difference=differencio, exclude = exludio)
-
-
-
-
-
-# %%
-#--- axis settinggrey
-axs[0, 0].legend(loc="lower left", fontsize=30)
-axs[0, 0].set_xlim(0, 30)
-axs[0, 1].set_xlim(-15, 15)
-axs[0, 2].set_xlim(-15, 15)
-# first diff
-axs[1, 0].set_ylim(-10, 10)
-axs[1, 0].set_yticks(np.arange(-10, 15, 5))
-# second diff
-axs[1, 1].set_ylim(-10, 10)
-axs[1, 1].set_yticks(np.arange(-10, 15, 5))
-# third diff
-axs[1, 2].set_ylim(-20, 20)
-axs[1, 2].set_yticks(np.arange(-20, 25, 10))
-
-# %%
-colors_ = colors=["black", "blue"]
-fig, axs = compare_dose([dose_exp, dose_chamber], labels=["Experimental","EGS_CHAMBER"], axes=[
-                        "X", "Y"], difference=True, interpol="quadratic", diff_dx=0.1, colors=colors_)
-#--- axis setting
-# first diff
-# second diff
-axs[1, 0].set_ylim(-10, 10)
-axs[1, 0].set_yticks(np.arange(-10, 15, 5))
-# third diff
-axs[1, 1].set_ylim(-20, 20)
-axs[1, 1].set_yticks(np.arange(-20, 25, 10))
-
-# TODO!
-#->auswählen der metriken
-#-> in doselib integrieren -> für 2 dose_objetcs die funktio callen -> setzt figsize automatich  (avoids dynamic design)
-
-# --- Metrics
-for  i, dose in enumerate([dose_exp, dose_chamber]):    
-    # X-Axis
-    props = dict(boxstyle='square', facecolor=colors[i], edgecolor="black", alpha=0.25, lw=3)
-    metric_string = get_metric_string(dose, AXIS="X")
-    axs[0,0].text(0.98, 0.95-i*0.3, metric_string, transform=axs[0,0].transAxes, fontsize=19, bbox=props, ha="right", va="top")
-    # Y-Axis
-    props = dict(boxstyle='square', facecolor=colors[1], edgecolor="black", alpha=1, lw=0.25)
-    metric_string = get_metric_string(dose, AXIS="Y", )
-    axs[0,1].text(0.98, 0.95-i*0.3, metric_string, transform=axs[0,1].transAxes, fontsize=19, bbox=props, ha="right", va="top")
-
-
-
-
 
 
 
