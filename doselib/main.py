@@ -292,7 +292,7 @@ class dose_3d(dose_object):
         A class that enables one to read .3ddose-Files with python and read certain profiles or arbitrary voxels.
         For more Info see Github 'https://github.com/Apelova/EGS_DOSE_TOOLS'.
     """
-    def __init__(self, PATH, INFO=False):
+    def __init__(self, PATH, INFO=False, FIRST_PDD_VOXEL_IS_HALF_VOLUME=True):
         dose_object.__init__(self) # maintain Attributes of dose_object
         self.origin = PATH
         if self.__test_path(INFO):        
@@ -311,6 +311,9 @@ class dose_3d(dose_object):
             if INFO:
             #--- output information on read
                 print(self)
+            if FIRST_PDD_VOXEL_IS_HALF_VOLUME:
+                self.pdd[0] = 2*self.pdd[0]
+                self.pdd.norm[0] = 2*self.pdd.norm[0]
         else:
             raise TypeError("The Input PATH is invalid!" )
 
@@ -805,8 +808,246 @@ class dose_mcc(dose_object):
  
  To save a profile one can just use the Pandas Datafram class e.g pd.DataFrame(dose_3d_object.y_profile).to_csv(destination_path)      
 ##############################################################################"""  
-#TODO ! metrics
-def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=None, colors = ["black", "red", "blue"], interpol="linear", diff_dx=0.1):
+
+def gamma(axes_reference, dose_reference, axes_evaluation, dose_evaluation,
+             dose_percent_threshold=3, distance_mm_threshold=0.3, dx=0.1, dD=0.1,
+             fill_step=0.01, CUTOFF=20, show_plt=False, derivatives=False):
+    """ Assumptions:
+            - both profiles are on a 0.1mm scaled grid ! -> could interpolate if necessary not implemented yet
+            - only tested for 1d Profiles !
+    """
+    # Required Assisting functions !
+    #--------------------------------------------------------------------------
+    def interpol_position(axis, step=0.05):
+        x_grid = np.arange(left_lim, right_lim, step=step)
+        f_interpol_position = interpolate.interp1d(axis, axis, fill_value='extrapolate', kind="linear")
+        return f_interpol_position(x_grid)
+
+    def interpol_dose(axis, dose, step=0.05):
+        x_grid = np.arange(left_lim, right_lim, step=step)
+        f_interpol_position = interpolate.interp1d(axis, dose, fill_value='extrapolate', kind="linear")
+        return f_interpol_position(x_grid)
+
+    def euclid_distance_gamma(x_r, D_r, x_e , D_e, dx=0.3, dD=3):
+        return np.sqrt(((D_r-D_e)/dD)**2 + ((x_r-x_e)/dx)**2)
+    
+    # Step 0a get limits for which Dose > 20 in both profiles ! 
+    #--------------------------------------------------------------------------
+    a, b = axes_reference[dose_reference>=CUTOFF][[0,-1]]
+    c, d = axes_evaluation[dose_evaluation>=CUTOFF][[0,-1]]
+    left_lim, right_lim = max([a,c]), min([b,d])
+    gamma_array = np.zeros(len(axes_reference))
+    ix = axes_reference.tolist().index(left_lim) #used to fill array
+    del a, b, c, d
+    
+    if show_plt:    
+        axes_for_plot = axes_reference
+
+    # Step 0b select observed Data (!!!!! Maintain order in selecting the indices ! first dose then axes !!!!!)
+    #--------------------------------------------------------------------------
+    dose_reference  = dose_reference[(axes_reference>left_lim)&(axes_reference<right_lim)]
+    axes_reference  = axes_reference[(axes_reference>left_lim)&(axes_reference<right_lim)]
+    dose_evaluation = dose_evaluation[(axes_evaluation>left_lim)&(axes_evaluation<right_lim)]
+    axes_evaluation = axes_evaluation[(axes_evaluation>left_lim)&(axes_evaluation<right_lim)]
+    
+    #Plot
+    if show_plt: #shows that a fine interpolation is required !  
+        if derivatives:
+            fig, axs = plt.subplots(1,4, figsize=(36, 10))    
+        else:
+            fig, axs = plt.subplots(1,3, figsize=(30, 10))   
+        axs[0].scatter(axes_reference, dose_reference, ec="black", fc="white", s=50)
+        axs[0].scatter(axes_evaluation, dose_evaluation, marker="x", c="red", s=50) 
+        
+    # Step 1a - interpol dose on fine grid !
+    #--------------------------------------------------------------------------
+    dose_evaluation_ip= interpol_dose(axes_evaluation, dose_evaluation, step=fill_step)
+    
+    # Step 1b - interpol position on fine grid !
+    #--------------------------------------------------------------------------
+    axes_evaluation_ip = interpol_position(axes_evaluation, step=fill_step)
+    #Plot
+    if show_plt:
+        axs[1].scatter(axes_evaluation_ip, dose_evaluation_ip, marker="x", c="red", s=50) 
+        axs[1].scatter(axes_reference, dose_reference, ec="black", fc="white", s=50) 
+
+    # Step 2 Implement Brute-Force Gamma-Index Calculation
+    #TODO! additionally use numba !    
+    count = 0
+    #--------------------------------------------------------------------------        
+    for x_R, D_R in zip(axes_reference, dose_reference):
+        min_gam = np.inf
+        for i in range(len(axes_evaluation_ip)):
+            temp = euclid_distance_gamma(
+                                         x_r = x_R , 
+                                         D_r = D_R ,
+                                         x_e = axes_evaluation_ip[i] , 
+                                         D_e = dose_evaluation_ip[i]
+                                        )
+            min_gam = temp if temp < min_gam else min_gam
+            
+    # Step 3 Fill the zero-array such that gamma is only available at x where D(x) > 20
+    #--------------------------------------------------------------------------    
+        gamma_array[ix+count] = min_gam
+        count +=1
+    del count
+        
+    #Plot and show comparison
+    if show_plt:
+        axs[2].plot(axes_for_plot, gamma_array, label="γ(x)", lw=2, c="#42a1f5")
+        axs[2].legend(loc="upper right", fontsize=20)
+
+    #Step 4 calculate derivatives
+    #--------------------------------------------------------------------------        
+    if derivatives:
+        dGamma_dx = np.zeros(len(gamma_array))
+        dGamma_dD = np.zeros(len(gamma_array))
+        #TODO! additionally use numba !    
+        #--------------------------------------------------------------------------        
+        for i in range(len(axes_reference)):
+             if i!=0 and i!=len(axes_reference)-1:
+                # O(delta**2) - Approximations
+                dGamma_dx[ix+i] = (gamma_array[ix+i+1]-gamma_array[ix+i-1])/(2*(axes_reference[i+1]-axes_reference[i-1])) \
+                                 if (axes_reference[i+1]-axes_reference[i-1]!=0) else 0     
+                 
+                dGamma_dD[ix+i] = (gamma_array[ix+i+1]-gamma_array[ix+i-1])/(2*(dose_reference[i+1]-dose_reference[i-1])) \
+                                 if (dose_reference[i+1]-dose_reference[i-1]!=0) else 0    
+        if show_plt:
+            pass
+            axs[3].plot(axes_for_plot, dGamma_dx, label="dγ/dx(x)", c="#4e42f5")
+            axs[3].plot(axes_for_plot, dGamma_dD, label="dγ/dD(x)", c="red")
+            axs[3].legend(loc="upper right", fontsize=20)        
+        return gamma_array, dGamma_dx, dGamma_dD
+            
+    return gamma_array  
+
+def rename_attr(name):
+    name_map = {
+        "D0_x": "D0",
+        "D0_y": "D0",
+        "H_x": "Hom",
+        "H_y": "Hom",
+        "S_x": "S",
+        "S_y": "S",
+        "dCAX_x": "ΔCAX",
+        "dCAX_y": "ΔCAX",
+        "penumbra_xl": "Left π",
+        "penumbra_xr": "Right π",
+        "penumbra_yl": "Left π",
+        "penumbra_yr": "Right π",}
+    return name_map[name] if name in name_map else name
+
+def get_metric_string(DOSE_OBJ, AXIS, exclude={}):
+    """return a string formated to fit the box"""
+    # ---
+    ATTRIBUTES = {"Z": ["D0", "Rmax", "D10", "D20", "Q"],
+                  "X": ["D0_x", "penumbra_xl", "penumbra_xr", "H_x", "S_x", "dCAX_x"],
+                  "Y": ["D0_y", "penumbra_yl", "penumbra_yr", "H_y", "S_y", "dCAX_y"]}
+    UNITS = {
+        "D0": "% ",
+        "Rmax": "cm",
+        "D10": "% ",
+        "D20": "% ",
+        "Q": "  ",
+        "D0_x": "% ",
+        "penumbra_xl": "cm",
+        "penumbra_xr": "cm",
+        "H_x": "  ",
+        "S_x": "  ",
+        "dCAX_x": "cm",
+        "D0_y": "% ",
+        "penumbra_yl": "cm",
+        "penumbra_yr": "cm",
+        "H_y": "  ",
+        "S_y": "  ",
+        "dCAX_y": "cm" } 
+    def add_digits_to_string(substring):
+        output = ""
+        if "-0." in substring:
+            output += " "
+        elif len(substring) == 4:
+            output +="  "
+        elif len(substring)<6:
+            output += " "
+            if "0." in substring:
+                output += " "                            
+                
+        output += substring
+        return output
+
+    if AXIS in exclude:
+        ATTRIBUTES[AXIS] = [attr for attr in ATTRIBUTES[AXIS] if attr not in exclude[AXIS]] 
+
+    #--- set amount of space such that "attr:" is equidistant (: at same position)
+    dL = max([len(rename_attr(attr)) for attr in ATTRIBUTES[AXIS]])
+    # --- gather requested  information in string and output
+    metric_string = ""
+    for attr in ATTRIBUTES[AXIS]:
+        if AXIS.upper() == "Z":
+            metric_string += f"{rename_attr(attr):<{dL}}: "
+            metric_string += add_digits_to_string(f"{getattr(DOSE_OBJ, attr):.2f}") 
+            metric_string += f"{UNITS[attr]}\n"
+        else:
+            metric_string += f"{rename_attr(attr):<{dL}}: "
+            metric_string += add_digits_to_string(f"{getattr(DOSE_OBJ, attr):.2f}")
+            metric_string += f"{UNITS[attr]}\n"
+    # --- remove last "\n"
+    return metric_string[:-1]
+
+def set_metrics(dose_objs, plot_axs, axes=["Z", "X", "Y"], difference=True, exclude={}, colors=["black", "blue"]):
+    dh_x = 6-len(exclude["X"]) if "X" in exclude else 6
+    dh_y = 6-len(exclude["Y"]) if "Y" in exclude else 6
+    for  i, dose in enumerate(dose_objs[:2]):#compare maximum two dose objs !
+        for j, ax in enumerate(axes):
+            if difference:
+                # Match statements require python 3,8 -> not available in the office therefore use this shananigans
+                if ax == "Z":
+                    props = dict(boxstyle='square', facecolor=colors[i], edgecolor="black", alpha=0.25, lw=3)
+                    metric_string = get_metric_string(dose, AXIS="Z", exclude=exclude)
+                    if len(axes)==1:
+                        plot_axs[0].text(0.69+i*0.29, 0.94, metric_string, transform=plot_axs[0].transAxes, fontsize=19, bbox=props, ha="right", va="top", font="monospace")
+                    else:
+                        plot_axs[0,j].text(0.69+i*0.29, 0.94, metric_string, transform=plot_axs[0,j].transAxes, fontsize=19, bbox=props, ha="right", va="top", font="monospace")
+                elif ax =="X":
+                    props = dict(boxstyle='square', facecolor=colors[i], edgecolor="black", alpha=0.25, lw=3)
+                    metric_string = get_metric_string(dose, AXIS="X", exclude=exclude)
+                    if len(axes)==1:
+                        plot_axs[0].text(0.98, 0.94-i*0.05*dh_x, metric_string, transform=plot_axs[0].transAxes, fontsize=19, bbox=props, ha="right", va="top", font="monospace")
+                    else:
+                        plot_axs[0,j].text(0.98, 0.94-i*0.05*dh_x, metric_string, transform=plot_axs[0,j].transAxes, fontsize=19, bbox=props, ha="right", va="top", font="monospace")
+                elif ax =="Y":
+                    props = dict(boxstyle='square', facecolor=colors[i], edgecolor="black", alpha=0.25, lw=3)
+                    metric_string = get_metric_string(dose, AXIS="Y", exclude=exclude)
+                    if len(axes)==1:
+                        plot_axs[0].text(0.98, 0.94-i*0.05*dh_y, metric_string, transform=plot_axs[0].transAxes, fontsize=19, bbox=props, ha="right", va="top", font="monospace")
+                    else:
+                        plot_axs[0,j].text(0.98, 0.94-i*0.05*dh_y, metric_string, transform=plot_axs[0,j].transAxes, fontsize=19, bbox=props, ha="right", va="top", font="monospace")
+            else:
+                if ax =="Z":
+                    props = dict(boxstyle='square', facecolor=colors[i], edgecolor="black", alpha=0.25, lw=3)
+                    metric_string = get_metric_string(dose, AXIS="Z", exclude=exclude)
+                    if len(axes)==1:
+                        plot_axs.text(0.76+i*0.22, 0.94, metric_string, transform=plot_axs.transAxes, fontsize=15, bbox=props, ha="right", va="top", font="monospace")
+                    else:
+                        plot_axs[j].text(0.76+i*0.22, 0.94, metric_string, transform=plot_axs[j].transAxes, fontsize=15, bbox=props, ha="right", va="top", font="monospace")
+                        
+                elif ax =="X":
+                    props = dict(boxstyle='square', facecolor=colors[i], edgecolor="black", alpha=0.25, lw=3)
+                    metric_string = get_metric_string(dose, AXIS="X", exclude=exclude)
+                    if len(axes)==1:
+                        plot_axs.text(0.98, 0.94-i*0.06*(dh_x+1), metric_string, transform=plot_axs.transAxes, fontsize=15, bbox=props, ha="right", va="top", font="monospace")
+                    else:
+                        plot_axs[j].text(0.98, 0.94-i*0.06*(dh_x+1), metric_string, transform=plot_axs[j].transAxes, fontsize=15, bbox=props, ha="right", va="top", font="monospace")
+                elif ax =="Y":
+                    props = dict(boxstyle='square', facecolor=colors[i], edgecolor="black", alpha=0.25, lw=3)
+                    metric_string = get_metric_string(dose, AXIS="Y", exclude=exclude)
+                    if len(axes)==1:
+                        plot_axs.text(0.98, 0.94-i*0.06*(dh_y+1), metric_string, transform=plot_axs.transAxes, fontsize=15, bbox=props, ha="right", va="top", font="monospace")
+                    else:
+                        plot_axs[j].text(0.98, 0.94-i*0.06*(dh_y+1), metric_string, transform=plot_axs[j].transAxes, fontsize=15, bbox=props, ha="right", va="top", font="monospace")
+
+
+def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=True, exclude= {}, colors = ["black", "red", "blue"], interpol="linear", diff_dx=0.1):
     """
         A function that return plot of selected axes.
         The limits can be set by calling the output !
@@ -850,6 +1091,7 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
         figsize = (8*(cols), (4*rows))
         figsize = (10*(cols), (5*rows))
     
+    matplotlib.rcParams['axes.grid'] = True
     #--- add requested plots
     if difference:
         fig_, axs_ = plt.subplots(rows, cols, figsize=figsize, sharex="col", constrained_layout=True, gridspec_kw={'height_ratios': [4,1]})
@@ -863,7 +1105,10 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
         common_position, interpolated_dose = interpolate_arrays( [pair[0] for pair in position_dose_pair_arrays], [pair[1] for pair in position_dose_pair_arrays])
         #--- iterate through all the AXIS to plot !
         for i in range(1, len(interpolated_dose)):
-            axs_[1,col].plot(common_position, interpolated_dose[i]-interpolated_dose[0], c=colors[i], lw=2)
+            if len(axes)==1:
+                axs_[1].plot(common_position, interpolated_dose[i]-interpolated_dose[0], c=colors[i], lw=2)
+            else:
+                axs_[1,col].plot(common_position, interpolated_dose[i]-interpolated_dose[0], c=colors[i], lw=2)
             
         
     #--- define helping functions !
@@ -873,15 +1118,26 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
             # the first one is the reference -> make it appear different!
             if i==0:
                 if difference:
-                    axs_[0, col].scatter(pair[0], pair[1], c=colors[i], label=labels[i], marker="o", s=45, alpha=0.75)
+                    if len(axes)==1:
+                        axs_[0].scatter(pair[0], pair[1], c=colors[i], label=labels[i], marker="o", s=45, alpha=0.75)
+                    else:
+                        axs_[0, col].scatter(pair[0], pair[1], c=colors[i], label=labels[i], marker="o", s=45, alpha=0.75)
                 else:
-                    axs_[col].scatter(pair[0], pair[1], c=colors[i], label=labels[i], marker="o", s=45, alpha=0.75)
-
+                    if len(axes)==1:
+                        axs_.scatter(pair[0], pair[1], c=colors[i], label=labels[i], marker="o", s=45, alpha=0.75)
+                    else:
+                        axs_[col].scatter(pair[0], pair[1], c=colors[i], label=labels[i], marker="o", s=45, alpha=0.75)
             else:                                       
                 if difference:
-                    axs_[0, col].plot(pair[0], pair[1], c=colors[i], lw=2, label=labels[i])
+                    if len(axes)==1:
+                        axs_[0].plot(pair[0], pair[1], c=colors[i], lw=2, label=labels[i])
+                    else:
+                        axs_[0, col].plot(pair[0], pair[1], c=colors[i], lw=2, label=labels[i])
                 else:
-                    axs_[col].plot(pair[0], pair[1], c=colors[i], lw=2, label=labels[i])
+                    if len(axes)==1:
+                        axs_.plot(pair[0], pair[1], c=colors[i], lw=2, label=labels[i])
+                    else:
+                        axs_[col].plot(pair[0], pair[1], c=colors[i], lw=2, label=labels[i])
 
         if difference:
             plot_difference(fig_, axs_, position_dose_pair_arrays, labels, metrics, colors)
@@ -897,32 +1153,84 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
         if axes[col] == "Z":
             plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd.norm] for each in dose_objects], labels, difference=difference, colors=colors)
 
-    #--- add grid
-    for i in range(cols):
-        if difference:
-            for j in range(rows):
-                axs_[j,i].grid()
-        else:
-            axs_[i].grid()
 
     #--- add x-labels
     axes_labels = {"X": "Position along X-Axis [cm]", "Y": "Position along Y-Axis [cm]", "Z": "Position along Z-Axis [cm]"}
-
     for i, each in enumerate(axes):
         if difference:
-            axs_[1,i].set_xlabel(axes_labels[each], fontsize=18)
+            if len(axes)==1:
+                axs_[1].set_xlabel(axes_labels[each], fontsize=18)
+            else:
+                axs_[1,i].set_xlabel(axes_labels[each], fontsize=18)
         else:
-            axs_[i].set_xlabel(axes_labels[each], fontsize=18)
+            if len(axes)==1:
+                axs_.set_xlabel(axes_labels[each], fontsize=18)
+            else:
+                axs_[i].set_xlabel(axes_labels[each], fontsize=18)
 
     #--- add y-labels
     if difference:
-        axs_[0,0].set_ylabel("relative Dose [%]", fontsize=18)
-        axs_[1,0].set_ylabel("Δ [%]", fontsize=18)
-        axs_[1,0].set
+        if len(axes)==1:
+            axs_[0].set_ylabel("relative Dose [%]", fontsize=18)
+            axs_[1].set_ylabel("Δ [%]", fontsize=18)
+        else:
+            axs_[0,0].set_ylabel("relative Dose [%]", fontsize=18)
+            axs_[1,0].set_ylabel("Δ [%]", fontsize=18)
     else:
-        axs_[0].set_ylabel("relative Dose [%]", fontsize=18)
+        if len(axes)==1:
+            axs_.set_ylabel("relative Dose [%]", fontsize=18)
+        else:            
+            axs_[0].set_ylabel("relative Dose [%]", fontsize=18)
+
     #---adjust labels
     matplotlib.rc('xtick', labelsize=18)
     matplotlib.rc('ytick', labelsize=18)
+
+        
+    if metrics:
+        set_metrics(dose_objects[:2], axs_, axes=axes, difference=difference, colors=colors, exclude=exclude)
+        
     #--- return fig and axs
     return fig_, axs_
+
+
+def gamma_plot(reference, to_be_evaluated):
+    gamma_z = gamma(
+                    axes_reference = reference.position.z, dose_reference  = reference.pdd.norm, 
+                    axes_evaluation= to_be_evaluated.position.z, dose_evaluation = to_be_evaluated.pdd.norm, 
+                    dose_percent_threshold=3, distance_mm_threshold=0.3, CUTOFF=0) #3% und 3mm
+
+    #X-Axis
+    gamma_x =gamma(
+                    axes_reference = reference.position.x, dose_reference  = reference.x_profile.norm, 
+                    axes_evaluation= to_be_evaluated.position.x, dose_evaluation = to_be_evaluated.x_profile.norm, 
+                    dose_percent_threshold=3, distance_mm_threshold=0.3) #3% und 3mm
+    #Y-Axis
+    gamma_y = gamma(
+                    axes_reference = reference.position.y, dose_reference  = reference.y_profile.norm, 
+                    axes_evaluation= to_be_evaluated.position.y, dose_evaluation = to_be_evaluated.y_profile.norm, 
+                    dose_percent_threshold=3, distance_mm_threshold=0.3) #3% und 3mm
+
+
+    Gamma_PR_Z = round(len(gamma_z[gamma_z<1])/len(gamma_z)*100,2)
+    Gamma_PR_x = round(len(gamma_x[gamma_x<1])/len(gamma_x)*100,2)
+    Gamma_PR_y = round(len(gamma_y[gamma_y<1])/len(gamma_y)*100,2)
+
+    fig, axs = plt.subplots(2,3, figsize=(25, 9), sharex="col")
+    fig.tight_layout()
+
+    #Z-Axis
+    axs[0,0].plot(reference.position.z, gamma_z, c="black")
+    axs[1,0].scatter(reference.position.z, reference.pdd.norm, c="black", marker="o", s=45, alpha=0.75)
+    axs[1,0].plot(to_be_evaluated.position.z, to_be_evaluated.pdd.norm, c="red", lw=2)
+    axs[0,0].set_title(f"γ(z) Passing Rate = {Gamma_PR_Z}%", font="monospace", fontsize=20)
+    #X-Axis
+    axs[0,1].plot(reference.position.x, gamma_x, c="black")
+    axs[1,1].scatter(reference.position.x, reference.x_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+    axs[1,1].plot(to_be_evaluated.position.x, to_be_evaluated.x_profile.norm, c="red", lw=2)
+    axs[0,1].set_title(f"γ(x) Passing Rate = {Gamma_PR_x}%", font="monospace", fontsize=20)
+    #Y-Axis
+    axs[0,2].plot(reference.position.y, gamma_y, c="black")
+    axs[1,2].scatter(reference.position.y, reference.y_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+    axs[1,2].plot(to_be_evaluated.position.y, to_be_evaluated.y_profile.norm, c="red", lw=2)
+    axs[0,2].set_title(f"γ(y) Passing Rate = {Gamma_PR_y}%", font="monospace", fontsize=20)

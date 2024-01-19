@@ -12,8 +12,8 @@ import pandas as pd
 import numpy as np
 import matplotlib
 
-path = "C:/Users/apel04/Desktop/master"  # Office Pc
 path = "/home/marvin/Desktop/master"    # Notebook
+path = "C:/Users/apel04/Desktop/master"  # Office Pc
 
 dose_dosy = dose_3d(
     path+"/Simulationen/DATA/TEST_PTB/DOSXYZ_NRC/ROUGH_GRID/PTB_6MV_old_dosxyz.3ddose")
@@ -49,7 +49,6 @@ def rename_attr(name):
         "penumbra_yr": "Right π",}
     return name_map[name] if name in name_map else name
 
-# %%
 def get_metric_string(DOSE_OBJ, AXIS, exclude={}):
     """return a string formated to fit the box"""
     # ---
