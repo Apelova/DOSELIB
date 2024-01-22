@@ -292,7 +292,7 @@ class dose_3d(dose_object):
         A class that enables one to read .3ddose-Files with python and read certain profiles or arbitrary voxels.
         For more Info see Github 'https://github.com/Apelova/EGS_DOSE_TOOLS'.
     """
-    def __init__(self, PATH, INFO=False, FIRST_PDD_VOXEL_IS_HALF_VOLUME=True):
+    def __init__(self, PATH, INFO=False, FIRST_PDD_VOXEL_IS_HALF_VOLUME=False):
         dose_object.__init__(self) # maintain Attributes of dose_object
         self.origin = PATH
         if self.__test_path(INFO):        
@@ -837,7 +837,12 @@ def gamma(axes_reference, dose_reference, axes_evaluation, dose_evaluation,
     c, d = axes_evaluation[dose_evaluation>=CUTOFF][[0,-1]]
     left_lim, right_lim = max([a,c]), min([b,d])
     gamma_array = np.zeros(len(axes_reference))
-    ix = axes_reference.tolist().index(left_lim) #used to fill array
+    
+    try: #if they are not on the same grid switch them 
+        ix = axes_reference.tolist().index(left_lim) #used to fill array
+    except:
+        raise ValueError("Switch the Input doseobjects !")
+        
     del a, b, c, d
     
     if show_plt:    
@@ -971,7 +976,7 @@ def get_metric_string(DOSE_OBJ, AXIS, exclude={}):
             output += " "
             if "0." in substring:
                 output += " "                            
-                
+        
         output += substring
         return output
 
@@ -984,7 +989,10 @@ def get_metric_string(DOSE_OBJ, AXIS, exclude={}):
     metric_string = ""
     for attr in ATTRIBUTES[AXIS]:
         if AXIS.upper() == "Z":
-            metric_string += f"{rename_attr(attr):<{dL}}: "
+            if attr == "D0":
+                metric_string += f"{rename_attr(attr):<{dL-1}}: "
+            else:
+                metric_string += f"{rename_attr(attr):<{dL}}: "
             metric_string += add_digits_to_string(f"{getattr(DOSE_OBJ, attr):.2f}") 
             metric_string += f"{UNITS[attr]}\n"
         else:
@@ -993,6 +1001,7 @@ def get_metric_string(DOSE_OBJ, AXIS, exclude={}):
             metric_string += f"{UNITS[attr]}\n"
     # --- remove last "\n"
     return metric_string[:-1]
+
 
 def set_metrics(dose_objs, plot_axs, axes=["Z", "X", "Y"], difference=True, exclude={}, colors=["black", "blue"]):
     dh_x = 6-len(exclude["X"]) if "X" in exclude else 6
@@ -1004,6 +1013,7 @@ def set_metrics(dose_objs, plot_axs, axes=["Z", "X", "Y"], difference=True, excl
                 if ax == "Z":
                     props = dict(boxstyle='square', facecolor=colors[i], edgecolor="black", alpha=0.25, lw=3)
                     metric_string = get_metric_string(dose, AXIS="Z", exclude=exclude)
+                    print(metric_string)
                     if len(axes)==1:
                         plot_axs[0].text(0.69+i*0.29, 0.94, metric_string, transform=plot_axs[0].transAxes, fontsize=19, bbox=props, ha="right", va="top", font="monospace")
                     else:
@@ -1047,7 +1057,8 @@ def set_metrics(dose_objs, plot_axs, axes=["Z", "X", "Y"], difference=True, excl
                         plot_axs[j].text(0.98, 0.94-i*0.06*(dh_y+1), metric_string, transform=plot_axs[j].transAxes, fontsize=15, bbox=props, ha="right", va="top", font="monospace")
 
 
-def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=True, exclude= {}, colors = ["black", "red", "blue"], interpol="linear", diff_dx=0.1):
+def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=True, exclude= {}, colors = ["black", "red", "blue"], 
+                  interpol="linear", diff_dx=0.1, scatter_first=True, show_labels=False, labels_loc="upper right", label_size=15):
     """
         A function that return plot of selected axes.
         The limits can be set by calling the output !
@@ -1082,6 +1093,12 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
     #--- limited input testing
     if len([ each for each in axes  if each not in ["X","Y","Z"] ]) != 0:
         raise TypeError(f"Invalid input for Axis! THe following Axes are invalid {[ each for each in axes  if each not in ['X','Y','Z'] ]} Valid Inputs are [x1X, Y, Z] ")
+   
+    if len(colors) < len(dose_objects):
+        raise ValueError("Missing Input colours (list with colours for plots has to be greated or equal the length of doseobjects to compare)")
+
+    if len(labels) < len(dose_objects) and show_labels:
+        raise ValueError("Missing Input labels (list with labels for plots has to be greated or equal the length of doseobjects to compare)")
 
     #--- set variables for layout
     cols, rows = (len(axes)), (int(difference)+1)
@@ -1112,11 +1129,11 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
             
         
     #--- define helping functions !
-    def plot_dose_distribution(fig_, axs_, position_dose_pair_arrays, labels, metrics=None, colors = ["black", "red", "blue"], difference=True):
+    def plot_dose_distribution(fig_, axs_, position_dose_pair_arrays, labels, metrics=None, colors = ["black", "red", "blue"], difference=True,scatter_first=True):
         #--- for each plot of the pairs 
         for i, pair in enumerate(position_dose_pair_arrays):
             # the first one is the reference -> make it appear different!
-            if i==0:
+            if i==0 and scatter_first:
                 if difference:
                     if len(axes)==1:
                         axs_[0].scatter(pair[0], pair[1], c=colors[i], label=labels[i], marker="o", s=45, alpha=0.75)
@@ -1138,6 +1155,14 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
                         axs_.plot(pair[0], pair[1], c=colors[i], lw=2, label=labels[i])
                     else:
                         axs_[col].plot(pair[0], pair[1], c=colors[i], lw=2, label=labels[i])
+            
+        if show_labels:
+            if difference:
+                axs_[0,0].legend(loc=labels_loc, fontsize=label_size)
+            else:
+                axs_[0].legend(loc=labels_loc, fontsize=label_size)
+            
+
 
         if difference:
             plot_difference(fig_, axs_, position_dose_pair_arrays, labels, metrics, colors)
@@ -1145,13 +1170,13 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
     for col in range(cols):
         #--- print original plots
         if axes[col] == "X":
-            plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors)
+            plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
                 
         if axes[col] == "Y":
-            plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors)
+            plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
     
         if axes[col] == "Z":
-            plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd.norm] for each in dose_objects], labels, difference=difference, colors=colors)
+            plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
 
 
     #--- add x-labels
@@ -1234,3 +1259,4 @@ def gamma_plot(reference, to_be_evaluated):
     axs[1,2].scatter(reference.position.y, reference.y_profile.norm, c="black", marker="o", s=45, alpha=0.75)
     axs[1,2].plot(to_be_evaluated.position.y, to_be_evaluated.y_profile.norm, c="red", lw=2)
     axs[0,2].set_title(f"γ(y) Passing Rate = {Gamma_PR_y}%", font="monospace", fontsize=20)
+
