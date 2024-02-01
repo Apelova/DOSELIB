@@ -1013,7 +1013,6 @@ def set_metrics(dose_objs, plot_axs, axes=["Z", "X", "Y"], difference=True, excl
                 if ax == "Z":
                     props = dict(boxstyle='square', facecolor=colors[i], edgecolor="black", alpha=0.25, lw=3)
                     metric_string = get_metric_string(dose, AXIS="Z", exclude=exclude)
-                    print(metric_string)
                     if len(axes)==1:
                         plot_axs[0].text(0.69+i*0.29, 0.94, metric_string, transform=plot_axs[0].transAxes, fontsize=19, bbox=props, ha="right", va="top", font="monospace")
                     else:
@@ -1057,7 +1056,7 @@ def set_metrics(dose_objs, plot_axs, axes=["Z", "X", "Y"], difference=True, excl
                         plot_axs[j].text(0.98, 0.94-i*0.06*(dh_y+1), metric_string, transform=plot_axs[j].transAxes, fontsize=15, bbox=props, ha="right", va="top", font="monospace")
 
 
-def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=True, exclude= {}, colors = ["black", "red", "blue"], 
+def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=False, exclude= {}, colors = ["black", "red", "blue"], 
                   interpol="linear", diff_dx=0.1, scatter_first=True, show_labels=False, labels_loc="upper right", label_size=15):
     """
         A function that return plot of selected axes.
@@ -1095,10 +1094,16 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
         raise TypeError(f"Invalid input for Axis! THe following Axes are invalid {[ each for each in axes  if each not in ['X','Y','Z'] ]} Valid Inputs are [x1X, Y, Z] ")
    
     if len(colors) < len(dose_objects):
-        raise ValueError("Missing Input colours (list with colours for plots has to be greated or equal the length of doseobjects to compare)")
+        import matplotlib.colors as mcolors
+        if len(dose_objects) > 10:
+            colors = [ rgb[1] for rgb in mcolors.CSS4_COLORS.items()]
+        else:
+            colors = [ rgb[1] for rgb in mcolors.TABLEAU_COLORS.items()]
+            
 
     if len(labels) < len(dose_objects) and show_labels:
         raise ValueError("Missing Input labels (list with labels for plots has to be greated or equal the length of doseobjects to compare)")
+
 
     #--- set variables for layout
     cols, rows = (len(axes)), (int(difference)+1)
@@ -1158,7 +1163,10 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
             
         if show_labels:
             if difference:
-                axs_[0,0].legend(loc=labels_loc, fontsize=label_size)
+                if len(axes) > 1:
+                    axs_[0,0].legend(loc=labels_loc, fontsize=label_size)
+                else:
+                    axs_[0].legend(loc=labels_loc, fontsize=label_size)
             else:
                 axs_[0].legend(loc=labels_loc, fontsize=label_size)
             
@@ -1219,22 +1227,22 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
     return fig_, axs_
 
 
-def gamma_plot(reference, to_be_evaluated):
+def gamma_plot(reference, to_be_evaluated, dD=3, dx=0.3, swap_scatter=False):
     gamma_z = gamma(
                     axes_reference = reference.position.z, dose_reference  = reference.pdd.norm, 
                     axes_evaluation= to_be_evaluated.position.z, dose_evaluation = to_be_evaluated.pdd.norm, 
-                    dose_percent_threshold=3, distance_mm_threshold=0.3, CUTOFF=0) #3% und 3mm
+                    dose_percent_threshold=dD, distance_mm_threshold=dx, CUTOFF=0) #3% und 3mm
 
     #X-Axis
     gamma_x =gamma(
                     axes_reference = reference.position.x, dose_reference  = reference.x_profile.norm, 
                     axes_evaluation= to_be_evaluated.position.x, dose_evaluation = to_be_evaluated.x_profile.norm, 
-                    dose_percent_threshold=3, distance_mm_threshold=0.3) #3% und 3mm
+                    dose_percent_threshold=dD, distance_mm_threshold=dx) #3% und 3mm
     #Y-Axis
     gamma_y = gamma(
                     axes_reference = reference.position.y, dose_reference  = reference.y_profile.norm, 
                     axes_evaluation= to_be_evaluated.position.y, dose_evaluation = to_be_evaluated.y_profile.norm, 
-                    dose_percent_threshold=3, distance_mm_threshold=0.3) #3% und 3mm
+                    dose_percent_threshold=dD, distance_mm_threshold=dx) #3% und 3mm
 
 
     Gamma_PR_Z = round(len(gamma_z[gamma_z<1])/len(gamma_z)*100,2)
@@ -1245,18 +1253,29 @@ def gamma_plot(reference, to_be_evaluated):
     fig.tight_layout()
 
     #Z-Axis
-    axs[0,0].plot(reference.position.z, gamma_z, c="black")
-    axs[1,0].scatter(reference.position.z, reference.pdd.norm, c="black", marker="o", s=45, alpha=0.75)
-    axs[1,0].plot(to_be_evaluated.position.z, to_be_evaluated.pdd.norm, c="red", lw=2)
+    if swap_scatter:
+        axs[1,0].plot(reference.position.z, reference.pdd.norm, c="red", lw=2)
+        axs[1,0].scatter(to_be_evaluated.position.z, to_be_evaluated.pdd.norm, c="black", marker="o", s=45, alpha=0.75)
+        axs[1,1].plot(reference.position.x, reference.x_profile.norm, c="red", lw=2)
+        axs[1,1].scatter(to_be_evaluated.position.x, to_be_evaluated.x_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+        axs[1,2].plot(reference.position.y, reference.y_profile.norm, c="red", lw=2)
+        axs[1,2].scatter(to_be_evaluated.position.y, to_be_evaluated.y_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+
+    else:
+        axs[1,0].scatter(reference.position.z, reference.pdd.norm, c="black", marker="o", s=45, alpha=0.75)
+        axs[1,0].plot(to_be_evaluated.position.z, to_be_evaluated.pdd.norm, c="red", lw=2)
+        axs[1,1].scatter(reference.position.x, reference.x_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+        axs[1,1].plot(to_be_evaluated.position.x, to_be_evaluated.x_profile.norm, c="red", lw=2)
+        axs[1,2].scatter(reference.position.y, reference.y_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+        axs[1,2].plot(to_be_evaluated.position.y, to_be_evaluated.y_profile.norm, c="red", lw=2)
+
     axs[0,0].set_title(f"γ(z) Passing Rate = {Gamma_PR_Z}%", font="monospace", fontsize=20)
+    axs[0,0].plot(reference.position.z, gamma_z, c="black")
     #X-Axis
     axs[0,1].plot(reference.position.x, gamma_x, c="black")
-    axs[1,1].scatter(reference.position.x, reference.x_profile.norm, c="black", marker="o", s=45, alpha=0.75)
-    axs[1,1].plot(to_be_evaluated.position.x, to_be_evaluated.x_profile.norm, c="red", lw=2)
     axs[0,1].set_title(f"γ(x) Passing Rate = {Gamma_PR_x}%", font="monospace", fontsize=20)
     #Y-Axis
     axs[0,2].plot(reference.position.y, gamma_y, c="black")
-    axs[1,2].scatter(reference.position.y, reference.y_profile.norm, c="black", marker="o", s=45, alpha=0.75)
-    axs[1,2].plot(to_be_evaluated.position.y, to_be_evaluated.y_profile.norm, c="red", lw=2)
     axs[0,2].set_title(f"γ(y) Passing Rate = {Gamma_PR_y}%", font="monospace", fontsize=20)
+
 
