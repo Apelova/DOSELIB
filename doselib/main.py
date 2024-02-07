@@ -71,6 +71,8 @@ class dose_object:
         #---  enables reusability of calculated indices -> inaccessibel for user
         self.__l_ix = None
         self.__r_ix= None
+        self.__l_iy = None
+        self.__r_iy= None
         #--- initialize all possible metrics NaN 
         self.pdd_max_abs = np.nan
         #--- PDD metrics
@@ -103,6 +105,13 @@ class dose_object:
         self.S_y= np.nan
         self.dCAX_y= np.nan
         
+    def norm_plateau(self):
+        if len(self.x_profile) > 1: 
+            self.x_profile.norm *= 100/np.mean(self.x_profile.norm[self.__l_ix: self.__r_ix])
+                    
+        if len(self.y_profile) > 1:
+            self.y_profile.norm *= 100/np.mean(self.y_profile.norm[self.__l_iy: self.__r_iy])
+
     def find_closest_index(self, array, value, show_warning=True):
         """ used to find the index in the array that is closest to the value """
         idx = abs(array - value).tolist().index( min(abs(array - value)) )
@@ -292,9 +301,10 @@ class dose_3d(dose_object):
         A class that enables one to read .3ddose-Files with python and read certain profiles or arbitrary voxels.
         For more Info see Github 'https://github.com/Apelova/EGS_DOSE_TOOLS'.
     """
-    def __init__(self, PATH, INFO=False, FIRST_PDD_VOXEL_IS_HALF_VOLUME=False):
+    def __init__(self, PATH, INFO=False, FIRST_PDD_VOXEL_IS_HALF_VOLUME=False, normalize_x_y_on_max=False):
         dose_object.__init__(self) # maintain Attributes of dose_object
         self.origin = PATH
+        self.normed_on_max = normalize_x_y_on_max
         if self.__test_path(INFO):        
             #--- boolean value that decides how dose_3d instance is treated/printed
             self.has_multiple_inputs = False
@@ -308,12 +318,16 @@ class dose_3d(dose_object):
             self.__set_profiles()
             #--- gather information for read
             self.__get_profile_depths()
-            if INFO:
-            #--- output information on read
-                print(self)
+            #--- normalize X/Y Profiles on start
+            if not self.normed_on_max:
+                self.norm_plateau()
+            #--- correct dose as Eabs/m when m[0] is 0.5 m[i] -> i index for all voxels without 0
             if FIRST_PDD_VOXEL_IS_HALF_VOLUME:
                 self.pdd[0] = 2*self.pdd[0]
                 self.pdd.norm[0] = 2*self.pdd.norm[0]
+            #--- output information on read
+            if INFO:
+                print(self)
         else:
             raise TypeError("The Input PATH is invalid!" )
 
@@ -390,8 +404,11 @@ class dose_3d(dose_object):
             self.error_matrix =  self.__matrix_from_array(np.array([float(x) for x in file.readline().split()]))
 
     def __replace_boundary_with_voxel_center(self):
+        if self.boundaries["z"][0] < 0:
+            self.boundaries["z"][0] = np.mean(self.boundaries["z"][0:2])
+            print(f"Warning --- First z-Boundary is negative ! Therfore it is replaced with {self.boundaries['z'][0]}. Make sure you set FIRST_PDD_VOXEL_IS_HALF_VOLUME==True")
         self.position = {axis: [sum(self.boundaries[axis][i:i+2])/2 for i in range(len(self.boundaries[axis])-1)] for axis in self.boundaries}
-        
+
     def __matrix_from_array(self,data_array_3d):
         nx, ny, nz = list(self.voxel_in_axis.values())
         matrix_array = []
@@ -487,7 +504,7 @@ class dose_3d(dose_object):
         
     #--- getter functions
     def get_pdd(self):
-        """ return the currently set Z-Profile/(PDD) and the corresponding statistical error"""
+        """ return the currently set Z-Profile/(PDD) and the codoserresponding statistical error"""
         return self.pdd, self.pdd_error
     
     def get_x_profile(self):
@@ -537,7 +554,7 @@ class dose_3d(dose_object):
     def add_profile(self, PATH, AXIS):
         """If the initial 3ddose-file is just a PDD you can add profiles with add_profile!"""        
         #--- read the additional 3ddose file and assign its profiles accordingly
-        profile = dose_3d(PATH)
+        profile = dose_3d(PATH, normalize_x_y_on_max=self.normed_on_max)
         if AXIS.lower()=="x":
             if len(profile.position.x) <= 10:
                 print(f"Warning---The X-profile you want to add has only {len(profile.position.x)} Entries. I hope you know what you are doing.")
@@ -591,7 +608,7 @@ class dose_3d(dose_object):
 
 
 class dose_mcc(dose_object):
-    def __init__(self, PATH, INFO=False):
+    def __init__(self, PATH, INFO=False,  normalize_x_y_on_max=False):
         dose_object.__init__(self) # maintain Attributes of dose_object        self.origin = PATH
         self.origin = PATH
         #--- extract data from scans and store the raw information in a dictionary .all_scans
@@ -601,7 +618,10 @@ class dose_mcc(dose_object):
         #--- set default profiles
         #--- load available profiles PDD, X/Y-Profiles
         self.__load_profiles()
-    
+        #--- norm plateau 
+        if not  normalize_x_y_on_max:
+            self.norm_plateau()            
+
         if INFO:
             print(self)  
          
@@ -793,6 +813,12 @@ class dose_mcc(dose_object):
         Y_NUMSCAN = int(self.available_depths_y[[i[1] for i in self.available_depths_y].index(DEPTH)][0].split("Scan")[-1])
         self.set_x_profile(X_NUMSCAN, MUTE)
         self.set_y_profile(Y_NUMSCAN, MUTE)
+        
+
+        
+        
+        
+        
     #--- show information about the project
     def __str__(self):
         return f""" ##############################################################################
@@ -1277,5 +1303,4 @@ def gamma_plot(reference, to_be_evaluated, dD=3, dx=0.3, swap_scatter=False):
     #Y-Axis
     axs[0,2].plot(reference.position.y, gamma_y, c="black")
     axs[0,2].set_title(f"γ(y) Passing Rate = {Gamma_PR_y}%", font="monospace", fontsize=20)
-
 
