@@ -71,6 +71,8 @@ class dose_object:
         #---  enables reusability of calculated indices -> inaccessibel for user
         self.__l_ix = None
         self.__r_ix= None
+        self.__l_iy = None
+        self.__r_iy= None
         #--- initialize all possible metrics NaN 
         self.pdd_max_abs = np.nan
         #--- PDD metrics
@@ -404,7 +406,7 @@ class dose_3d(dose_object):
     def __replace_boundary_with_voxel_center(self):
         if self.boundaries["z"][0] < 0:
             self.boundaries["z"][0] = np.mean(self.boundaries["z"][0:2])
-            print(f"Warning --- First z-Boundary is negative ! Therfore it is replaced with {self.boundaries['z'][0]}. Make sure you set FIRST_PDD_VOXEL_IS_HALF_VOLUME==True")
+            print(f"Warning --- First z-Boundary is negative ! Therfore it is replaced with {self.boundaries['z'][0]}. Make sure to test if you have to set FIRST_PDD_VOXEL_IS_HALF_VOLUME==True")
         self.position = {axis: [sum(self.boundaries[axis][i:i+2])/2 for i in range(len(self.boundaries[axis])-1)] for axis in self.boundaries}
 
     def __matrix_from_array(self,data_array_3d):
@@ -911,8 +913,10 @@ def gamma(axes_reference, dose_reference, axes_evaluation, dose_evaluation,
                                          x_r = x_R , 
                                          D_r = D_R ,
                                          x_e = axes_evaluation_ip[i] , 
-                                         D_e = dose_evaluation_ip[i]
+                                         D_e = dose_evaluation_ip[i],
+                                         dx=dx, dD=dD
                                         )
+
             min_gam = temp if temp < min_gam else min_gam
             
     # Step 3 Fill the zero-array such that gamma is only available at x where D(x) > 20
@@ -1081,7 +1085,7 @@ def set_metrics(dose_objs, plot_axs, axes=["Z", "X", "Y"], difference=True, excl
 
 
 def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=False, exclude= {}, colors = ["black", "red", "blue"], 
-                  interpol="linear", diff_dx=0.1, scatter_first=True, show_labels=False, labels_loc="upper right", label_size=15):
+                  interpol="linear", diff_dx=0.1, scatter_first=True, show_labels=False, labels_loc="upper right", label_size=15, norm_on_max=False):
     """
         A function that return plot of selected axes.
         The limits can be set by calling the output !
@@ -1192,9 +1196,10 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
                 else:
                     axs_[0].legend(loc=labels_loc, fontsize=label_size)
             else:
-                axs_[0].legend(loc=labels_loc, fontsize=label_size)
-            
-
+                if len(axes) > 1:
+                    axs_[0].legend(loc=labels_loc, fontsize=label_size)
+                else:
+                    axs_.legend(loc=labels_loc, fontsize=label_size)
 
         if difference:
             plot_difference(fig_, axs_, position_dose_pair_arrays, labels, metrics, colors)
@@ -1202,13 +1207,22 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
     for col in range(cols):
         #--- print original plots
         if axes[col] == "X":
-            plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
-                
+            if norm_on_max:
+                plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile/max(each.x_profile)*100] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+            else:                
+                plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+
         if axes[col] == "Y":
-            plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+            if norm_on_max:
+                plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile/max(each.y_profile)*100] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+            else:
+                plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
     
         if axes[col] == "Z":
-            plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+            if norm_on_max:
+                plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd/max(each.pdd)*100] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+            else:
+                plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
 
 
     #--- add x-labels
@@ -1251,54 +1265,78 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
     return fig_, axs_
 
 
-def gamma_plot(reference, to_be_evaluated, dD=3, dx=0.3, swap_scatter=False):
-    gamma_z = gamma(
-                    axes_reference = reference.position.z, dose_reference  = reference.pdd.norm, 
-                    axes_evaluation= to_be_evaluated.position.z, dose_evaluation = to_be_evaluated.pdd.norm, 
-                    dose_percent_threshold=dD, distance_mm_threshold=dx, CUTOFF=0) #3% und 3mm
+def gamma_plot(reference, to_be_evaluated, dD=3, dx=0.3, swap_scatter=False, just_profiles=False, scatter_first=True):
+    if just_profiles:
+        pass
+    else:
+        gamma_z = gamma(
+                        axes_reference = reference.position.z, dose_reference  = reference.pdd.norm, 
+                        axes_evaluation= to_be_evaluated.position.z, dose_evaluation = to_be_evaluated.pdd.norm, 
+                        dose_percent_threshold=dD, distance_mm_threshold=dx, CUTOFF=0, dD=dD, dx=dx) #3% und 3mm
+        Gamma_PR_Z = round(len(gamma_z[gamma_z<1])/len(gamma_z)*100,2)
 
     #X-Axis
     gamma_x =gamma(
                     axes_reference = reference.position.x, dose_reference  = reference.x_profile.norm, 
                     axes_evaluation= to_be_evaluated.position.x, dose_evaluation = to_be_evaluated.x_profile.norm, 
-                    dose_percent_threshold=dD, distance_mm_threshold=dx) #3% und 3mm
+                    dose_percent_threshold=dD, distance_mm_threshold=dx, dD=dD, dx=dx) #3% und 3mm
     #Y-Axis
     gamma_y = gamma(
                     axes_reference = reference.position.y, dose_reference  = reference.y_profile.norm, 
                     axes_evaluation= to_be_evaluated.position.y, dose_evaluation = to_be_evaluated.y_profile.norm, 
-                    dose_percent_threshold=dD, distance_mm_threshold=dx) #3% und 3mm
+                    dose_percent_threshold=dD, distance_mm_threshold=dx, dD=dD, dx=dx) #3% und 3mm
 
 
-    Gamma_PR_Z = round(len(gamma_z[gamma_z<1])/len(gamma_z)*100,2)
     Gamma_PR_x = round(len(gamma_x[gamma_x<1])/len(gamma_x)*100,2)
     Gamma_PR_y = round(len(gamma_y[gamma_y<1])/len(gamma_y)*100,2)
 
-    fig, axs = plt.subplots(2,3, figsize=(25, 9), sharex="col")
+    if just_profiles:
+        fig, axs = plt.subplots(2,2, figsize=(25, 9), sharex="col")
+    else:
+        fig, axs = plt.subplots(2,3, figsize=(25, 9), sharex="col")
+        axs[0,2].set_title(f"γ(z) Passing Rate = {Gamma_PR_Z}%", font="monospace", fontsize=20)
+        axs[0,2].plot(reference.position.z, gamma_z, c="black")
     fig.tight_layout()
 
     #Z-Axis
     if swap_scatter:
-        axs[1,0].plot(reference.position.z, reference.pdd.norm, c="red", lw=2)
-        axs[1,0].scatter(to_be_evaluated.position.z, to_be_evaluated.pdd.norm, c="black", marker="o", s=45, alpha=0.75)
-        axs[1,1].plot(reference.position.x, reference.x_profile.norm, c="red", lw=2)
-        axs[1,1].scatter(to_be_evaluated.position.x, to_be_evaluated.x_profile.norm, c="black", marker="o", s=45, alpha=0.75)
-        axs[1,2].plot(reference.position.y, reference.y_profile.norm, c="red", lw=2)
-        axs[1,2].scatter(to_be_evaluated.position.y, to_be_evaluated.y_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+        axs[1,0].plot(reference.position.x, reference.x_profile.norm, c="red", lw=2)
+        axs[1,1].plot(reference.position.y, reference.y_profile.norm, c="red", lw=2)
+        if scatter_first:
+            axs[1,0].scatter(to_be_evaluated.position.x, to_be_evaluated.x_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+            axs[1,1].scatter(to_be_evaluated.position.y, to_be_evaluated.y_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+        else:
+            axs[1,0].plot(to_be_evaluated.position.x, to_be_evaluated.x_profile.norm, c="black", lw=2)
+            axs[1,1].plot(to_be_evaluated.position.y, to_be_evaluated.y_profile.norm, c="black", lw=2)
+            
+        if just_profiles:
+            pass
+        else:
+            axs[1,2].plot(reference.position.z, reference.pdd.norm, c="red", lw=2)
+            axs[1,2].scatter(to_be_evaluated.position.z, to_be_evaluated.pdd.norm, c="black", marker="o", s=45, alpha=0.75)
 
     else:
-        axs[1,0].scatter(reference.position.z, reference.pdd.norm, c="black", marker="o", s=45, alpha=0.75)
-        axs[1,0].plot(to_be_evaluated.position.z, to_be_evaluated.pdd.norm, c="red", lw=2)
-        axs[1,1].scatter(reference.position.x, reference.x_profile.norm, c="black", marker="o", s=45, alpha=0.75)
-        axs[1,1].plot(to_be_evaluated.position.x, to_be_evaluated.x_profile.norm, c="red", lw=2)
-        axs[1,2].scatter(reference.position.y, reference.y_profile.norm, c="black", marker="o", s=45, alpha=0.75)
-        axs[1,2].plot(to_be_evaluated.position.y, to_be_evaluated.y_profile.norm, c="red", lw=2)
-
-    axs[0,0].set_title(f"γ(z) Passing Rate = {Gamma_PR_Z}%", font="monospace", fontsize=20)
-    axs[0,0].plot(reference.position.z, gamma_z, c="black")
+        axs[1,0].plot(to_be_evaluated.position.x, to_be_evaluated.x_profile.norm, c="red", lw=2)
+        axs[1,1].plot(to_be_evaluated.position.y, to_be_evaluated.y_profile.norm, c="red", lw=2)
+        if scatter_first:
+            axs[1,0].scatter(reference.position.x, reference.x_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+            axs[1,1].scatter(reference.position.y, reference.y_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+        else:
+            axs[1,0].scatter(reference.position.x, reference.x_profile.norm, c="black", marker="o", s=45, alpha=0.75)
+            axs[1,1].scatter(reference.position.y, reference.y_profile.norm, c="black", lw=2)
+            
+        if just_profiles:
+            pass
+        else:
+            axs[1,2].scatter(reference.position.z, reference.pdd.norm, c="black", marker="o", s=45, alpha=0.75)
+            axs[1,2].plot(to_be_evaluated.position.z, to_be_evaluated.pdd.norm, c="red", lw=2)
+        
     #X-Axis
-    axs[0,1].plot(reference.position.x, gamma_x, c="black")
-    axs[0,1].set_title(f"γ(x) Passing Rate = {Gamma_PR_x}%", font="monospace", fontsize=20)
+    axs[0,0].plot(reference.position.x, gamma_x, c="black")
+    axs[0,0].set_title(f"γ(x) Passing Rate = {Gamma_PR_x}%", font="monospace", fontsize=20)
     #Y-Axis
-    axs[0,2].plot(reference.position.y, gamma_y, c="black")
-    axs[0,2].set_title(f"γ(y) Passing Rate = {Gamma_PR_y}%", font="monospace", fontsize=20)
+    axs[0,1].plot(reference.position.y, gamma_y, c="black")
+    axs[0,1].set_title(f"γ(y) Passing Rate = {Gamma_PR_y}%", font="monospace", fontsize=20)
+    
+    return fig, axs
 
