@@ -7,6 +7,7 @@ Definition of all classes and methods used in to analyse .3ddose or .mcc files.
 
 """
 from scipy.optimize import fsolve
+from decimal import Decimal as D
 import matplotlib.pyplot as plt
 from scipy import interpolate
 import pandas as pd 
@@ -21,12 +22,16 @@ class _xyz_array_Object:
         self.z = np.array(array["z"])
 
 class normable_array(np.ndarray):
+    """ A normable array is the Object-Class used to represent Dose-Profiles
+        The normalized profile can easily be accessed through the attribute .norm
+    """
     def __new__(cls, arr):
         obj = np.asarray(arr).view(cls)
         return obj
 
     def __init__(self, arr):
-        self.norm = self/max(self)*100
+        self.norm = self/max(self)*100    
+ 
 
 class _mcc_scan:
     def __init__(self, GANTRY_angle, SCAN_curvetype, SCAN_angle, SCAN_depth, DATA):
@@ -608,9 +613,10 @@ class dose_3d(dose_object):
 
 
 class dose_mcc(dose_object):
-    def __init__(self, PATH, INFO=False,  normalize_x_y_on_max=False):
+    def __init__(self, PATH, INFO=False,  normalize_x_y_on_max=False, average_profiles=False):
         dose_object.__init__(self) # maintain Attributes of dose_object        self.origin = PATH
         self.origin = PATH
+        self.average_profiles_at_init = average_profiles
         #--- extract data from scans and store the raw information in a dictionary .all_scans
         self.__load_scans()
         #--- scan to dose object
@@ -747,7 +753,7 @@ class dose_mcc(dose_object):
             elif self.all_scans[i].AXIS == "X":
                 if self.x_profile.size==0:
                     self.position.x = self.all_scans[i].POSITION
-                    self.x_profile = self.all_scans[i].DOSE
+                    self.x_profile = self.all_scans[i].DOSE                  
                     self.x_profile_error = self.all_scans[i].ERROR
                     self.set_metrics_profile("X")
                     action = "set"
@@ -767,7 +773,29 @@ class dose_mcc(dose_object):
             else:
                 print(f"Warning---Axis of Scan {i} is unknown!")
 
+        if self.average_profiles_at_init:    
+            self.average_profile()
 
+        
+    def average_profile(self):
+        """ only works if profile is meassured symmetrically !"""
+        if self.position.x.size:
+            if (self.position.x.shape[0]%2==1):
+                Nx = self.position.x.shape[0]//2 
+                averaged_x = (self.x_profile.norm[:Nx] + self.x_profile.norm[:Nx:-1])/2
+                self.x_profile.norm[:Nx] = averaged_x
+                self.x_profile.norm[:Nx:-1] = averaged_x
+            else:
+                print("Warning --- averaging of X-Profile impossible (assymetric meassurements)")
+
+        if self.position.y.size:
+            if (self.position.y.shape[0]%2==1):
+                Ny = self.position.y.shape[0]//2 
+                averaged_y = (self.y_profile.norm[:Ny] + self.y_profile.norm[:Ny:-1])/2
+                self.y_profile.norm[:Ny] = averaged_y
+                self.y_profile.norm[:Ny:-1] = averaged_y
+            else:
+                print("Warning --- averaging of Y-Profile impossible (assymetric meassurements)")
 
         
     def set_x_profile(self, NUMSCAN, MUTE=True):
@@ -861,13 +889,14 @@ def gamma(axes_reference, dose_reference, axes_evaluation, dose_evaluation,
     #--------------------------------------------------------------------------
     a, b = axes_reference[dose_reference>=CUTOFF][[0,-1]]
     c, d = axes_evaluation[dose_evaluation>=CUTOFF][[0,-1]]
+    a, b, c, d = round(a, 2), round(b, 2), round(c, 2), round(d, 2) #to avoid floating point errors
     left_lim, right_lim = max([a,c]), min([b,d])
     gamma_array = np.zeros(len(axes_reference))
     
     try: #if they are not on the same grid switch them 
         ix = axes_reference.tolist().index(left_lim) #used to fill array
     except:
-        raise ValueError("Switch the Input doseobjects !")
+        raise ValueError("Try to Switch the Input doseobjects! If this doesnt the error most likely occurs to the limted resolution of 1 digit after '.' in the axes.")
         
     del a, b, c, d
     
@@ -880,7 +909,7 @@ def gamma(axes_reference, dose_reference, axes_evaluation, dose_evaluation,
     axes_reference  = axes_reference[(axes_reference>left_lim)&(axes_reference<right_lim)]
     dose_evaluation = dose_evaluation[(axes_evaluation>left_lim)&(axes_evaluation<right_lim)]
     axes_evaluation = axes_evaluation[(axes_evaluation>left_lim)&(axes_evaluation<right_lim)]
-    
+
     #Plot
     if show_plt: #shows that a fine interpolation is required !  
         if derivatives:
@@ -1272,19 +1301,19 @@ def gamma_plot(reference, to_be_evaluated, dD=3, dx=0.3, swap_scatter=False, jus
         gamma_z = gamma(
                         axes_reference = reference.position.z, dose_reference  = reference.pdd.norm, 
                         axes_evaluation= to_be_evaluated.position.z, dose_evaluation = to_be_evaluated.pdd.norm, 
-                        dose_percent_threshold=dD, distance_mm_threshold=dx, CUTOFF=0, dD=dD, dx=dx) #3% und 3mm
+                        CUTOFF=0, dD=dD, dx=dx) #3% und 3mm
         Gamma_PR_Z = round(len(gamma_z[gamma_z<1])/len(gamma_z)*100,2)
 
     #X-Axis
     gamma_x =gamma(
                     axes_reference = reference.position.x, dose_reference  = reference.x_profile.norm, 
                     axes_evaluation= to_be_evaluated.position.x, dose_evaluation = to_be_evaluated.x_profile.norm, 
-                    dose_percent_threshold=dD, distance_mm_threshold=dx, dD=dD, dx=dx) #3% und 3mm
+                    dD=dD, dx=dx) #3% und 3mm
     #Y-Axis
     gamma_y = gamma(
                     axes_reference = reference.position.y, dose_reference  = reference.y_profile.norm, 
                     axes_evaluation= to_be_evaluated.position.y, dose_evaluation = to_be_evaluated.y_profile.norm, 
-                    dose_percent_threshold=dD, distance_mm_threshold=dx, dD=dD, dx=dx) #3% und 3mm
+                    dD=dD, dx=dx) #3% und 3mm
 
 
     Gamma_PR_x = round(len(gamma_x[gamma_x<1])/len(gamma_x)*100,2)
