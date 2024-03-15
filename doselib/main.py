@@ -1369,3 +1369,104 @@ def gamma_plot(reference, to_be_evaluated, dD=3, dx=0.3, swap_scatter=False, jus
     
     return fig, axs
 
+class dose_chamber_log(dose_object):
+    """
+        A class that enables one to read dosevalues from .egslog-Files that follow a specific labeling scheme
+        For more Info see Github 'https://github.com/Apelova/EGS_DOSE_TOOLS'.
+    """
+    def __init__(self, PATH, INFO=False, normalize_x_y_on_max=False):
+        dose_object.__init__(self) # maintain Attributes of dose_object
+        self.origin = PATH
+        self.normed_on_max = normalize_x_y_on_max
+
+        if self.__test_path(): 
+            #--- if input is list of paths corresponding to xyz load them all
+            #--- load data
+            self.__read_values() 
+            return None
+            #--- change datastructure
+            #self.__dicts_to_xyz_arrays()
+            #--- gather information for read
+            #self.__get_profile_depths()
+            #--- normalize X/Y Profiles on start
+            #if not self.normed_on_max:
+            #    self.norm_plateau()
+            #--- calculate metrics for profiles
+            #self.set_metrics()
+            #--- output information on read
+            if INFO:
+                print(self)
+        else:
+            raise TypeError("Missing Input for Variable Path!" )
+
+
+    def __test_path(self):
+        is_valid = True
+        
+        if type(self.origin) == list:
+            self.has_multiple_inputs = True
+            for input_string in self.origin:
+                if not( input_string.endswith("egslog") if type(input_string )==str else False):
+                    return False
+        else:
+            is_valid = self.origin.endswith("egslog") if type(self.origin)==str else False
+            
+        return is_valid 
+
+    def __read_values(self):
+        if self.has_multiple_inputs:
+            for file in self.origin:
+                self.__read_file(file)
+        else:
+            self.__read_file(self.origin)
+
+    def __read_file(self, file):
+        print(file)
+
+
+test = dose_chamber_log(["Z:/home/apel04/egsnrc_2023/egs_chamber/test_x.egslog",
+                         "Z:/home/apel04/egsnrc_2023/egs_chamber/test_y.egslog",
+                         "Z:/home/apel04/egsnrc_2023/egs_chamber/test_z.egslog"])
+#test = dose_chamber_log("Z:/home/apel04/egsnrc_2023/egs_chamber/test_y.egslog")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
