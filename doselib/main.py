@@ -7,10 +7,8 @@ Definition of all classes and methods used in to analyse .3ddose or .mcc files.
 
 """
 from scipy.optimize import fsolve
-from decimal import Decimal as D
 import matplotlib.pyplot as plt
 from scipy import interpolate
-import pandas as pd 
 import numpy as np
 import matplotlib
 import os
@@ -111,11 +109,13 @@ class dose_object:
         self.dCAX_y= np.nan
         
     def norm_plateau(self):
-        if len(self.x_profile) > 1: 
-            self.x_profile.norm *= 100/np.mean(self.x_profile.norm[self.__l_ix: self.__r_ix])
-                    
-        if len(self.y_profile) > 1:
-            self.y_profile.norm *= 100/np.mean(self.y_profile.norm[self.__l_iy: self.__r_iy])
+        if self.x_profile is not None:
+            if len(self.x_profile) > 1: 
+                self.x_profile.norm *= 100/np.mean(self.x_profile.norm[self.__l_ix: self.__r_ix])
+
+        if self.y_profile is not None:
+            if len(self.y_profile) > 1:
+                self.y_profile.norm *= 100/np.mean(self.y_profile.norm[self.__l_iy: self.__r_iy])
 
     def find_closest_index(self, array, value, show_warning=True):
         """ used to find the index in the array that is closest to the value """
@@ -1148,7 +1148,7 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
 
     #--- limited input testing
     if len([ each for each in axes  if each not in ["X","Y","Z"] ]) != 0:
-        raise TypeError(f"Invalid input for Axis! THe following Axes are invalid {[ each for each in axes  if each not in ['X','Y','Z'] ]} Valid Inputs are [x1X, Y, Z] ")
+        raise TypeError(f"Invalid input for Axis! THe following Axes are invalid {[ each for each in axes  if each not in ['X','Y','Z'] ]} Valid Inputs are [X, Y, Z] ")
    
     if len(colors) < len(dose_objects):
         import matplotlib.colors as mcolors
@@ -1374,32 +1374,50 @@ class dose_chamber_log(dose_object):
         A class that enables one to read dosevalues from .egslog-Files that follow a specific labeling scheme
         For more Info see Github 'https://github.com/Apelova/EGS_DOSE_TOOLS'.
     """
-    def __init__(self, PATH, INFO=False, normalize_x_y_on_max=False):
+    def __init__(self, PATH, INFO=False, normalize_x_y_on_max=False, delete_deviants=False, error_limit=10):
         dose_object.__init__(self) # maintain Attributes of dose_object
         self.origin = PATH
         self.normed_on_max = normalize_x_y_on_max
+        self.without_deviants = delete_deviants
+        self.error_limit = error_limit
+
+        if self.without_deviants:
+            print(f"Warning --- Values with Error larger than {self.error_limit}% will be neglected!")
 
         if self.__test_path(): 
-            #--- if input is list of paths corresponding to xyz load them all
             #--- load data
-            self.__read_values() 
-            return None
-            #--- change datastructure
-            #self.__dicts_to_xyz_arrays()
-            #--- gather information for read
-            #self.__get_profile_depths()
+            self.__read_values() #if input is list of paths corresponding to xyz load them all
+            #--- metrics are automatically calculated after assigning the profiles and thus norm_on_plateu can be done ! 
             #--- normalize X/Y Profiles on start
-            #if not self.normed_on_max:
-            #    self.norm_plateau()
-            #--- calculate metrics for profiles
-            #self.set_metrics()
+            if not self.normed_on_max:
+                 self.norm_plateau()
             #--- output information on read
             if INFO:
                 print(self)
         else:
             raise TypeError("Missing Input for Variable Path!" )
 
+    def __str__(self):
+        """Print Information about the egslog dose object """
+        return f"""
+##############################################################################
+  Successfully read the egslog-File(s) and assigned it to the class attributes\n
+  
+  X-Profile is {"not" if (self.position.x.size==0) else ""} available {"within the intervall " + str([self.position.x[0], self.position.x[-1]])+" !" if (self.position.x.size!=0) else "."}\n
 
+  Y-Profile is {"not" if (self.position.y.size==0) else ""} available {"within the intervall " + str([self.position.y[0], self.position.y[-1]])+" !" if (self.position.y.size!=0) else "."}\n
+
+  PDD is {"not" if (self.position.z.size==0) else ""} available {"within the intervall " + str([self.position.z[0], self.position.z[-1]])+" !" if (self.position.z.size!=0) else "."}\n
+  
+  NOTE THAT THE INFORMATION ABOUT THE PROFILE DEPTH AND (X,Y)-COORDIANTES FOR THE PDD NEED TO BE CONCLUDED FROM THE .egsinp manually !
+  
+  You can access the Dose-values quickly through OBJECT_NAME.pdd, OBJECT_NAME.x_profile, OBJECT_NAME.y_profile.
+  Alternatnatively you can use set_profiles or set_pdd to change the position of each Doseprofile or use get_plane to get a 2D-np.array representing a plane.
+  If you want to access individual Elements use the class attribute  'dose_matrix' an access it with dose_matrix[z_index, y_index, x_index].
+  
+  To save a profile one can just call the pandas Datafram class method pd.DataFrame(profile).to_csv()  e.g pd.DataFrame(dose_3d_object.y_profile).to_csv(destination_path)      
+##############################################################################
+""" 
     def __test_path(self):
         is_valid = True
         
@@ -1414,59 +1432,134 @@ class dose_chamber_log(dose_object):
         return is_valid 
 
     def __read_values(self):
+        """ calls read_file to get the information and then orders it into a xyz array !"""
+        self.position = _xyz_array_Object({"x":[], "y":[], "z":[]})
         if self.has_multiple_inputs:
-            for file in self.origin:
-                self.__read_file(file)
+            for file_path in self.origin:
+                self.__read_file(file_path)
         else:
             self.__read_file(self.origin)
 
-    def __read_file(self, file):
-        print(file)
 
+    def __read_file(self, file_path):
+        """ return arrays of position, dose, and error for one file and a char that entails which axis was simulated"""
+        with open(file_path) as file:
+            content = file.readlines()
+            
+        #--- skip to start of value list
+        for i, line in enumerate(content):
+            if "this MUST be zero!" in line:
+                i+=1
+                break
+        
+        axis = content[i].split("_dose")[0] # in chamber geometries are called either x_dose, y_dose or z_dose ! 
+        #--- skip to start of value list
+        position, dose, error = [], [], []
+        
+        if self.without_deviants:
+            for line in content[i::]:
+                if line == "\n":
+                    break
+                pos_i, dose_i, err_i = np.array(line.split())[[0, 1, 3]] 
+                if (float(err_i) if "%" not in err_i else float(err_i[:-1])) < self.error_limit:
+                    position.append(float(pos_i.split("dose_")[1])) 
+                    dose.append(float(dose_i)) 
+                    error.append(float(err_i) if "%" not in err_i else float(err_i[:-1])) 
+                
+        else:
+            for line in content[i::]:
+                if line == "\n":
+                    break
+                pos_i, dose_i, err_i = np.array(line.split())[[0, 1, 3]] 
+                position.append(float(pos_i.split("dose_")[1])) 
+                dose.append(float(dose_i)) 
+                error.append(float(err_i) if "%" not in err_i else float(err_i[:-1])) 
+        
+        #--- assign the read in values to the corresponding class attribute
+        self.__assign_values(axis, position, dose, error)
 
-test = dose_chamber_log(["Z:/home/apel04/egsnrc_2023/egs_chamber/test_x.egslog",
-                         "Z:/home/apel04/egsnrc_2023/egs_chamber/test_y.egslog",
-                         "Z:/home/apel04/egsnrc_2023/egs_chamber/test_z.egslog"])
-#test = dose_chamber_log("Z:/home/apel04/egsnrc_2023/egs_chamber/test_y.egslog")
+    def __assign_values(self, axis, pos, dose, error):
+        if  axis=="x":
+            self.position.x = np.array(pos)
+            self.x_profile = normable_array(dose)
+            self.x_profile_error = np.array(error)
+            self.set_metrics_profile("X")
+        elif axis=="y":
+            self.position.y = np.array(pos)
+            self.y_profile = normable_array(dose)
+            self.y_profile_error = np.array(error)
+            self.set_metrics_profile("Y")
+        else:
+            self.position.z = np.array(pos)
+            self.pdd = normable_array(dose)
+            self.pdd_error = np.array(error)
+            self.set_pdd_metrics()
+ 
+    def remove_value(self, axis, position):
+        """ """
+        if axis.upper() == "Z":
+            ix = self.find_closest_index(self.position.z, position)
+            print(f"Warning --- removed z-Value at {self.position.z[ix]}cm!")
+            self.position.z = np.delete(self.position.z, ix) 
+            self.pdd = normable_array(np.delete(self.pdd, ix)) #rescale pdd.norm ! 
+            self.pdd_error = np.delete(self.pdd_error, ix) 
+            self.set_pdd_metrics()
+        
+        if axis.upper() == "X":
+            ix = self.find_closest_index(self.position.x, position)
+            print(f"Warning --- removed x-Value at {self.position.x[ix]}cm!")
+            self.position.x = np.delete(self.position.x, ix) 
+            self.x_profile = normable_array(np.delete(self.x_profile, ix)) #rescale pdd.norm ! 
+            self.x_profile_error = np.delete(self.x_profile_error, ix) 
+            self.set_metrics_profile("X")
+            
+        if axis.upper() == "Y":
+            ix = self.find_closest_index(self.position.y, position)
+            print(f"Warning --- removed y-Value at {self.position.y[ix]}cm!")
+            self.position.y = np.delete(self.position.y, ix) 
+            self.y_profile = normable_array(np.delete(self.y_profile, ix)) #rescale pdd.norm ! 
+            self.y_profile_error = np.delete(self.y_profile_error, ix) 
+            self.set_metrics_profile("Y")
+            
 
+def plot_chamber_sim(path, err_lim=10, label=None):
+    #-- read file
+    with open(path) as file:
+        content = file.readlines()
+        
+    #--- skip to start of value list
+    for i, line in enumerate(content):
+        if "this MUST be zero!" in line:
+            i+=1
+            break
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    #--- skip to start of value list
+    position, dose, error = [], [], []
+    for line in content[i::]:
+        if line == "\n":
+            break
+        pos_i, dose_i, err_i = np.array(line.split())[[0, 1, 3]] 
+        position.append(float(pos_i.split("dose_")[1])) 
+        dose.append(float(dose_i)) 
+        error.append(float(err_i) if "%" not in err_i else float(err_i[:-1])) 
+        
+    position_wod, dose_wod, error_wod = [], [], []
+    #--- filter deviants
+    for i in range(len(dose)):
+        if error[i] < err_lim:
+            position_wod.append(position[i])
+            dose_wod.append(dose[i])
+            error_wod.append(error[i])
+        
+    #--- Plot everything
+    fig, axs = plt.subplots(3, 2, figsize=(20,10), sharey="row", tight_layout=True)
+    #--- with deviants
+    axs[0,0].scatter(position, dose)
+    axs[1,0].scatter(position, error)
+    axs[2,0].hist(error, bins=list(np.linspace(0, 20, 100)))
+    #--- without deviants
+    axs[0,1].scatter(position_wod, dose_wod)
+    axs[1,1].scatter(position_wod, error_wod)
+    axs[2,1].hist(error_wod, bins=list(np.linspace(0, 20, 100)))
+    if label:
+        fig.suptitle(label, fontsize=25)

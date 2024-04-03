@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: doselib
-Version: 1.2
+Version: 1.3
 Summary: Library to extract Data or freatures from EGSnrc Monte-Carlo Simulation results
 Home-page: https://github.com/Apelova/DOSELIB
 Author: Marvin Apel aka Apelova
