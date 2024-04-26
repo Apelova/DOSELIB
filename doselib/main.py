@@ -184,14 +184,18 @@ class dose_object:
     
     
     def set_metrics_profile(self, AXIS):
-        self.__set_Dose_on_axis(AXIS)
-        self.__set_penumbra_limits_20(AXIS)
-        self.__set_penumbra_limits_80(AXIS)
-        self.__set_penumbra_width(AXIS)
-        self.__set_halfwidth(AXIS)
-        self.__set_dCAX(AXIS)
-        self.__set_homogeneity(AXIS)
-        self.__set_symmetry(AXIS)
+        try:
+            self.__set_Dose_on_axis(AXIS)
+            self.__set_penumbra_limits_20(AXIS)
+            self.__set_penumbra_limits_80(AXIS)
+            self.__set_penumbra_width(AXIS)
+            self.__set_halfwidth(AXIS)
+            self.__set_dCAX(AXIS)
+            self.__set_homogeneity(AXIS)
+            self.__set_symmetry(AXIS)
+        except:
+            print(f"Warning --- setting metrics for {AXIS}-axes failed !")
+
         
     def __set_Dose_on_axis(self, AXIS): #hier muss man eigentlich auch interpolieren !
         """ it is expected that dose the profiles include 0 !!"""
@@ -945,7 +949,6 @@ def gamma(axes_reference, dose_reference, axes_evaluation, dose_evaluation,
                                          D_e = dose_evaluation_ip[i],
                                          dx=dx, dD=dD
                                         )
-
             min_gam = temp if temp < min_gam else min_gam
             
     # Step 3 Fill the zero-array such that gamma is only available at x where D(x) > 20
@@ -1113,7 +1116,7 @@ def set_metrics(dose_objs, plot_axs, axes=["Z", "X", "Y"], difference=True, excl
                         plot_axs[j].text(0.98, 0.94-i*0.06*(dh_y+1), metric_string, transform=plot_axs[j].transAxes, fontsize=15, bbox=props, ha="right", va="top", font="monospace")
 
 
-def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=False, exclude= {}, colors = ["black", "red", "blue"], 
+def compare_dose( dose_objects, labels=None, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=False, exclude= {}, colors = ["black", "red", "blue"], 
                   interpol="linear", diff_dx=0.1, scatter_first=True, show_labels=False, labels_loc="upper right", label_size=15, norm_on_max=False):
     """
         A function that return plot of selected axes.
@@ -1123,7 +1126,10 @@ def compare_dose( dose_objects, labels, axes=["Z", "X", "Y"], difference=True, f
         
         metrics = "average", "profiles"
         
-    """    
+    """ 
+    if labels is None:
+        labels = [i for i in range(len(dose_objects))]
+        
     def interpolate_arrays(position_array, dose_array, dx=diff_dx, interpol=interpol):
         #--- get position limits
         min_shared_position = max([min(dose) for dose in position_array])  #all intervalls include this point !
@@ -1563,3 +1569,4 @@ def plot_chamber_sim(path, err_lim=10, label=None):
     axs[2,1].hist(error_wod, bins=list(np.linspace(0, 20, 100)))
     if label:
         fig.suptitle(label, fontsize=25)
+
