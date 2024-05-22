@@ -41,6 +41,7 @@ class _mcc_scan:
         self.AXIS=None
         self.POSITION=None
         self.DOSE=None
+        self.ReferenceValue=None
         self.Error=None
 
 class dose_object:
@@ -617,10 +618,11 @@ class dose_3d(dose_object):
 
 
 class dose_mcc(dose_object):
-    def __init__(self, PATH, INFO=False,  normalize_x_y_on_max=False, average_profiles=False):
+    def __init__(self, PATH, INFO=False,  normalize_x_y_on_max=False, average_profiles=False, consider_reference=False):
         dose_object.__init__(self) # maintain Attributes of dose_object        self.origin = PATH
         self.origin = PATH
         self.average_profiles_at_init = average_profiles
+        self.consider_reference = consider_reference
         #--- extract data from scans and store the raw information in a dictionary .all_scans
         self.__load_scans()
         #--- scan to dose object
@@ -711,18 +713,24 @@ class dose_mcc(dose_object):
             #---convert
             self.all_scans[i].POSITION = np.array(self.all_scans[i].DATA)[:,0]/10 #/10 mm to cm 
             self.all_scans[i].DOSE = normable_array(np.array(self.all_scans[i].DATA)[:,1])
-            try:
-                self.all_scans[i].ERROR= np.array(self.all_scans[i].DATA)[:,2]
-            except: #some meassurements dont store the error !
-                self.all_scans[i].ERROR= np.array([np.nan for i in self.all_scans[i].DOSE])
-            #--- invert data such that coordinate systems match !
-            if "-" in self.all_scans[i].AXIS:
-                self.all_scans[i].POSITION = self.all_scans[i].POSITION[::-1]*-1 #necessary if scan is not symmetric !
-                self.all_scans[i].DOSE = normable_array(self.all_scans[i].DOSE[::-1])
-                self.all_scans[i].ERROR = self.all_scans[i].ERROR[::-1]
-                #after fixing coordinate set axis label -X/-Y/-Z -> X/Y/Z
-                self.all_scans[i].AXIS = self.all_scans[i].AXIS[1::]
+    
+            try:    
+                self.all_scans[i].ReferenceValue = normable_array(np.array(self.all_scans[i].DATA)[:,2])
+                self.has_reference = True
+                print("MCC-File contains either reference values or experimental errors. Call consider_reference to fix normalized profiles.")
+            except:
+                try:
+                    self.all_scans[i].ERROR= np.array(self.all_scans[i].DATA)[:,2]
+                except: #some meassurements dont store the error !
+                    self.all_scans[i].ERROR= np.array([np.nan for i in self.all_scans[i].DOSE])
             
+            if self.has_reference:
+                try:
+                    self.all_scans[i].ERROR= np.array(self.all_scans[i].DATA)[:,3]
+                except: #some meassurements dont store the error !
+                    self.all_scans[i].ERROR= np.array([np.nan for i in self.all_scans[i].DOSE])
+            
+                    
                 
     def __get_axis_label(self, i):
         """ Implementation only viable for GANTRY_ANGLE==0, the axis definition is made such that x from read_mcc== x from read_3ddose"""        
@@ -731,7 +739,7 @@ class dose_mcc(dose_object):
                 return "Y"
             
             elif self.all_scans[i].SCAN_curvetype == "INPLANE_PROFILE":
-                return "-X"
+                return "X"
     
             else:
                 return "undefined"
@@ -744,6 +752,9 @@ class dose_mcc(dose_object):
         self.position = _xyz_array_Object({"x":[],"y":[],"z":[]})
         self.available_depths_x, self.available_depths_y = [], []
         
+        if self.consider_reference:
+            print("--- Reference will be considered in the normalized profiles ---")
+
         for i in self.all_scans:
             action = "loaded"                
 
@@ -752,6 +763,9 @@ class dose_mcc(dose_object):
                 self.pdd = self.all_scans[i].DOSE
                 self.pdd_error = self.all_scans[i].ERROR
                 self.set_pdd_metrics()
+                if self.consider_reference: #would be normalized on plateau so just normalize on max here !
+                    self.pdd = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
+                
                 print("Successfully set Percentage Depth Dose (PDD)!")
             
             elif self.all_scans[i].AXIS == "X":
@@ -761,6 +775,14 @@ class dose_mcc(dose_object):
                     self.x_profile_error = self.all_scans[i].ERROR
                     self.set_metrics_profile("X")
                     action = "set"
+                    if self.consider_reference: #would be normalized on plateau so just normalize on max here !
+                        #plt.figure(figsize=(20,20))
+                        #plt.title("X-Axis", fontsize=25)
+                        #plt.plot(self.position.x, self.x_profile.norm, label="ohne Referenz")
+                        self.x_profile = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
+                        #plt.plot(self.position.x, self.x_profile.norm, label="mit Referenz")
+                        #plt.legend(loc="lower center", fontsize=20)
+                        
                 self.available_depths_x.append((f"Number of Scan {i}",float(self.all_scans[i].SCAN_DEPTH)/10))
                 print(f"Successfully {action} X-Profile at depth Z={float(self.all_scans[i].SCAN_DEPTH)/10}cm!")
             
@@ -771,6 +793,14 @@ class dose_mcc(dose_object):
                     self.y_profile_error = self.all_scans[i].ERROR
                     self.set_metrics_profile("Y")
                     action = "set"
+                    if self.consider_reference: #would be normalized on plateau so just normalize on max here !
+                        #plt.figure(figsize=(20,20))
+                        #plt.title("Y-Axis", fontsize=25)
+                        #plt.plot(self.position.y, self.y_profile.norm, label="ohne Referenz")
+                        self.y_profile = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
+                        #plt.plot(self.position.y, self.y_profile.norm, label="mit Referenz")
+                        #plt.legend(loc="lower center", fontsize=20)
+
                 self.available_depths_y.append((f"Number of Scan {i}",float(self.all_scans[i].SCAN_DEPTH)/10))
                 print(f"Successfully {action} Y-Profile at depth Z={float(self.all_scans[i].SCAN_DEPTH)/10}cm!")
             
@@ -845,11 +875,7 @@ class dose_mcc(dose_object):
         Y_NUMSCAN = int(self.available_depths_y[[i[1] for i in self.available_depths_y].index(DEPTH)][0].split("Scan")[-1])
         self.set_x_profile(X_NUMSCAN, MUTE)
         self.set_y_profile(Y_NUMSCAN, MUTE)
-        
-
-        
-        
-        
+                
         
     #--- show information about the project
     def __str__(self):
@@ -1569,4 +1595,21 @@ def plot_chamber_sim(path, err_lim=10, label=None):
     axs[2,1].hist(error_wod, bins=list(np.linspace(0, 20, 100)))
     if label:
         fig.suptitle(label, fontsize=25)
+
+
+
+
+if __name__ == "__main__":
+    """ Example of the newest feature reading in .mcc-Data-Files !"""
+    norm_on_max = True
+    dose_ohne = dose_mcc("C:/Users/apel04/Desktop/Data_Backup/Messungen/6MeV_FF_complete/PinPointComplete/PROFILES_ONLY/35x35_6MV_both_profiles_dt_0_2mm_s_with_reference.mcc", average_profiles=True, normalize_x_y_on_max=norm_on_max )
+    fig, axs = plt.subplots(1, 2, figsize=(34,17))
+    axs[0].plot(dose_ohne.position.x, dose_ohne.x_profile.norm, lw=1, label="without reference")
+    axs[1].plot(dose_ohne.position.y, dose_ohne.y_profile.norm, lw=1)
+    dose_mit = dose_mcc("C:/Users/apel04/Desktop/Data_Backup/Messungen/6MeV_FF_complete/PinPointComplete/PROFILES_ONLY/35x35_6MV_both_profiles_dt_0_2mm_s_with_reference.mcc", average_profiles=True, normalize_x_y_on_max=norm_on_max , consider_reference=True)
+    axs[0].plot(dose_mit.position.x, dose_mit.x_profile.norm, lw=1, label="with reference")
+    axs[1].plot(dose_mit.position.y, dose_mit.y_profile.norm, lw=1)
+    axs[0].legend(loc="lower center", fontsize=20)
+
+
 
