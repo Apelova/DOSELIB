@@ -623,6 +623,7 @@ class dose_mcc(dose_object):
         self.origin = PATH
         self.average_profiles_at_init = average_profiles
         self.consider_reference = consider_reference
+        self.has_reference = False
         #--- extract data from scans and store the raw information in a dictionary .all_scans
         self.__load_scans()
         #--- scan to dose object
@@ -754,7 +755,7 @@ class dose_mcc(dose_object):
         
         if self.consider_reference:
             print("--- Reference will be considered in the normalized profiles ---")
-
+            
         for i in self.all_scans:
             action = "loaded"                
 
@@ -764,7 +765,10 @@ class dose_mcc(dose_object):
                 self.pdd_error = self.all_scans[i].ERROR
                 self.set_pdd_metrics()
                 if self.consider_reference: #would be normalized on plateau so just normalize on max here !
-                    self.pdd = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
+                    try:    
+                        self.pdd = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
+                    except:
+                        print("--- Reference Values for Z-Axis are missing. ! Therefore they are not considered ! ---")
                 
                 print("Successfully set Percentage Depth Dose (PDD)!")
             
@@ -776,12 +780,11 @@ class dose_mcc(dose_object):
                     self.set_metrics_profile("X")
                     action = "set"
                     if self.consider_reference: #would be normalized on plateau so just normalize on max here !
-                        #plt.figure(figsize=(20,20))
-                        #plt.title("X-Axis", fontsize=25)
-                        #plt.plot(self.position.x, self.x_profile.norm, label="ohne Referenz")
-                        self.x_profile = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
-                        #plt.plot(self.position.x, self.x_profile.norm, label="mit Referenz")
-                        #plt.legend(loc="lower center", fontsize=20)
+                        try:    
+                            self.x_profile = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
+                        except:
+                            print("--- Reference Values for X-Axis are missing. ! Therefore they are not considered ! ---")
+
                         
                 self.available_depths_x.append((f"Number of Scan {i}",float(self.all_scans[i].SCAN_DEPTH)/10))
                 print(f"Successfully {action} X-Profile at depth Z={float(self.all_scans[i].SCAN_DEPTH)/10}cm!")
@@ -794,12 +797,10 @@ class dose_mcc(dose_object):
                     self.set_metrics_profile("Y")
                     action = "set"
                     if self.consider_reference: #would be normalized on plateau so just normalize on max here !
-                        #plt.figure(figsize=(20,20))
-                        #plt.title("Y-Axis", fontsize=25)
-                        #plt.plot(self.position.y, self.y_profile.norm, label="ohne Referenz")
-                        self.y_profile = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
-                        #plt.plot(self.position.y, self.y_profile.norm, label="mit Referenz")
-                        #plt.legend(loc="lower center", fontsize=20)
+                        try:    
+                            self.y_profile = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
+                        except:
+                            print("--- Reference Values for Y-Axis are missing. ! Therefore they are not considered ! ---")
 
                 self.available_depths_y.append((f"Number of Scan {i}",float(self.all_scans[i].SCAN_DEPTH)/10))
                 print(f"Successfully {action} Y-Profile at depth Z={float(self.all_scans[i].SCAN_DEPTH)/10}cm!")
@@ -1610,6 +1611,5 @@ if __name__ == "__main__":
     axs[0].plot(dose_mit.position.x, dose_mit.x_profile.norm, lw=1, label="with reference")
     axs[1].plot(dose_mit.position.y, dose_mit.y_profile.norm, lw=1)
     axs[0].legend(loc="lower center", fontsize=20)
-
 
 
