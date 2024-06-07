@@ -118,6 +118,15 @@ class dose_object:
             if len(self.y_profile) > 1:
                 self.y_profile.norm *= 100/np.mean(self.y_profile.norm[self.__l_iy: self.__r_iy])
 
+    def norm_on_center(self):
+        if self.x_profile is not None:
+            center_x = self.find_closest_index(self.position.x, 0)
+            self.x_profile.norm = self.x_profile.norm/self.x_profile.norm[center_x]*100 
+
+        if self.y_profile is not None:
+            center_y = self.find_closest_index(self.position.y, 0)
+            self.y_profile.norm = self.y_profile.norm/self.y_profile.norm[center_y]*100 
+
     def find_closest_index(self, array, value, show_warning=True):
         """ used to find the index in the array that is closest to the value """
         idx = abs(array - value).tolist().index( min(abs(array - value)) )
@@ -311,10 +320,12 @@ class dose_3d(dose_object):
         A class that enables one to read .3ddose-Files with python and read certain profiles or arbitrary voxels.
         For more Info see Github 'https://github.com/Apelova/EGS_DOSE_TOOLS'.
     """
-    def __init__(self, PATH, INFO=False, FIRST_PDD_VOXEL_IS_HALF_VOLUME=False, normalize_x_y_on_max=False):
+    def __init__(self, PATH, INFO=False, FIRST_PDD_VOXEL_IS_HALF_VOLUME=False, normalize_x_y_on_max=False, normalize_profiles_on_center=False):
         dose_object.__init__(self) # maintain Attributes of dose_object
         self.origin = PATH
-        self.normed_on_max = normalize_x_y_on_max
+        self.normed_on_max    = normalize_x_y_on_max
+        self.normed_on_center = normalize_profiles_on_center
+    
         if self.__test_path(INFO):        
             #--- boolean value that decides how dose_3d instance is treated/printed
             self.has_multiple_inputs = False
@@ -329,8 +340,10 @@ class dose_3d(dose_object):
             #--- gather information for read
             self.__get_profile_depths()
             #--- normalize X/Y Profiles on start
-            if not self.normed_on_max:
+            if not self.normed_on_max and not self.normed_on_center:
                 self.norm_plateau()
+            elif self.normed_on_center:
+                self.norm_on_center()
             #--- correct dose as Eabs/m when m[0] is 0.5 m[i] -> i index for all voxels without 0
             if FIRST_PDD_VOXEL_IS_HALF_VOLUME:
                 self.pdd[0] = 2*self.pdd[0]
@@ -340,6 +353,8 @@ class dose_3d(dose_object):
                 print(self)
         else:
             raise TypeError("The Input PATH is invalid!" )
+       
+        print(" ")
 
     def __str__(self):
         """Print Information about the 3ddose object """
@@ -564,7 +579,7 @@ class dose_3d(dose_object):
     def add_profile(self, PATH, AXIS):
         """If the initial 3ddose-file is just a PDD you can add profiles with add_profile!"""        
         #--- read the additional 3ddose file and assign its profiles accordingly
-        profile = dose_3d(PATH, normalize_x_y_on_max=self.normed_on_max)
+        profile = dose_3d(PATH, normalize_x_y_on_max=self.normed_on_max, normalize_profiles_on_center=self.normed_on_center)
         if AXIS.lower()=="x":
             if len(profile.position.x) <= 10:
                 print(f"Warning---The X-profile you want to add has only {len(profile.position.x)} Entries. I hope you know what you are doing.")
@@ -579,7 +594,7 @@ class dose_3d(dose_object):
                 self.available_depths_x = np.append([], profile.position.z)
             else:
                 self.available_depths_x = np.append(self.available_depths_x, profile.position.z)
-
+            
             print(f"added x-profile at z {profile.position.z.tolist()}!\n")
             
         elif AXIS.lower()=="y":
@@ -618,7 +633,7 @@ class dose_3d(dose_object):
 
 
 class dose_mcc(dose_object):
-    def __init__(self, PATH, INFO=False,  normalize_x_y_on_max=False, average_profiles=False, consider_reference=False):
+    def __init__(self, PATH, INFO=False,  normalize_x_y_on_max=False, average_profiles=False, consider_reference=False, normalize_profiles_on_center=False):
         dose_object.__init__(self) # maintain Attributes of dose_object        self.origin = PATH
         self.origin = PATH
         self.average_profiles_at_init = average_profiles
@@ -632,12 +647,14 @@ class dose_mcc(dose_object):
         #--- load available profiles PDD, X/Y-Profiles
         self.__load_profiles()
         #--- norm plateau 
-        if not  normalize_x_y_on_max:
+        if not normalize_x_y_on_max and not normalize_profiles_on_center:
             self.norm_plateau()            
-
+        elif normalize_profiles_on_center:
+            self.norm_on_center()
         if INFO:
             print(self)  
-         
+        print(" ")
+            
     def __load_scans(self):
         """
             This Routine is specifically designed to read the dose meassured using the PTW-BEAMSCAN system in the meassuring protocol
@@ -714,7 +731,6 @@ class dose_mcc(dose_object):
             #---convert
             self.all_scans[i].POSITION = np.array(self.all_scans[i].DATA)[:,0]/10 #/10 mm to cm 
             self.all_scans[i].DOSE = normable_array(np.array(self.all_scans[i].DATA)[:,1])
-    
             try:    
                 self.all_scans[i].ReferenceValue = normable_array(np.array(self.all_scans[i].DATA)[:,2])
                 self.has_reference = True
@@ -766,7 +782,7 @@ class dose_mcc(dose_object):
                 self.set_pdd_metrics()
                 if self.consider_reference: #would be normalized on plateau so just normalize on max here !
                     try:    
-                        self.pdd = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
+                        self.pdd = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)                    
                     except:
                         print("--- Reference Values for Z-Axis are missing. ! Therefore they are not considered ! ---")
                 
@@ -782,6 +798,7 @@ class dose_mcc(dose_object):
                     if self.consider_reference: #would be normalized on plateau so just normalize on max here !
                         try:    
                             self.x_profile = normable_array(self.all_scans[i].DOSE/self.all_scans[i].ReferenceValue)
+
                         except:
                             print("--- Reference Values for X-Axis are missing. ! Therefore they are not considered ! ---")
 
@@ -808,7 +825,7 @@ class dose_mcc(dose_object):
             else:
                 print(f"Warning---Axis of Scan {i} is unknown!")
 
-        if self.average_profiles_at_init:    
+        if self.average_profiles_at_init:
             self.average_profile()
 
         
@@ -820,6 +837,7 @@ class dose_mcc(dose_object):
                 averaged_x = (self.x_profile.norm[:Nx] + self.x_profile.norm[:Nx:-1])/2
                 self.x_profile.norm[:Nx] = averaged_x
                 self.x_profile.norm[:Nx:-1] = averaged_x
+                self.x_profile.norm = self.x_profile.norm/max(self.x_profile.norm)*100
             else:
                 print("Warning --- averaging of X-Profile impossible (assymetric meassurements)")
 
@@ -829,10 +847,11 @@ class dose_mcc(dose_object):
                 averaged_y = (self.y_profile.norm[:Ny] + self.y_profile.norm[:Ny:-1])/2
                 self.y_profile.norm[:Ny] = averaged_y
                 self.y_profile.norm[:Ny:-1] = averaged_y
+                self.y_profile.norm = self.y_profile.norm/max(self.y_profile.norm)*100
             else:
                 print("Warning --- averaging of Y-Profile impossible (assymetric meassurements)")
 
-        
+    
     def set_x_profile(self, NUMSCAN, MUTE=True):
         try:
             int(NUMSCAN)
@@ -1327,7 +1346,7 @@ def compare_dose( dose_objects, labels=None, axes=["Z", "X", "Y"], difference=Tr
     return fig_, axs_
 
 
-def gamma_plot(reference, to_be_evaluated, dD=3, dx=0.3, swap_scatter=False, just_profiles=False, scatter_first=True):
+def gamma_plot(reference, to_be_evaluated, dD=3, dx=0.3, swap_scatter=False, just_profiles=False, scatter_first=True, CUTOFF=20):
     if just_profiles:
         pass
     else:
@@ -1341,12 +1360,12 @@ def gamma_plot(reference, to_be_evaluated, dD=3, dx=0.3, swap_scatter=False, jus
     gamma_x =gamma(
                     axes_reference = reference.position.x, dose_reference  = reference.x_profile.norm, 
                     axes_evaluation= to_be_evaluated.position.x, dose_evaluation = to_be_evaluated.x_profile.norm, 
-                    dD=dD, dx=dx) #3% und 3mm
+                    dD=dD, dx=dx, CUTOFF=CUTOFF) #3% und 3mm
     #Y-Axis
     gamma_y = gamma(
                     axes_reference = reference.position.y, dose_reference  = reference.y_profile.norm, 
                     axes_evaluation= to_be_evaluated.position.y, dose_evaluation = to_be_evaluated.y_profile.norm, 
-                    dD=dD, dx=dx) #3% und 3mm
+                    dD=dD, dx=dx, CUTOFF=CUTOFF) #3% und 3mm
 
 
     Gamma_PR_x = round(len(gamma_x[gamma_x<1])/len(gamma_x)*100,2)
@@ -1429,6 +1448,7 @@ class dose_chamber_log(dose_object):
                 print(self)
         else:
             raise TypeError("Missing Input for Variable Path!" )
+        print(" ")
 
     def __str__(self):
         """Print Information about the egslog dose object """
@@ -1602,14 +1622,13 @@ def plot_chamber_sim(path, err_lim=10, label=None):
 
 if __name__ == "__main__":
     """ Example of the newest feature reading in .mcc-Data-Files !"""
-    norm_on_max = True
-    dose_ohne = dose_mcc("C:/Users/apel04/Desktop/Data_Backup/Messungen/6MeV_FF_complete/PinPointComplete/PROFILES_ONLY/35x35_6MV_both_profiles_dt_0_2mm_s_with_reference.mcc", average_profiles=True, normalize_x_y_on_max=norm_on_max )
-    fig, axs = plt.subplots(1, 2, figsize=(34,17))
-    axs[0].plot(dose_ohne.position.x, dose_ohne.x_profile.norm, lw=1, label="without reference")
-    axs[1].plot(dose_ohne.position.y, dose_ohne.y_profile.norm, lw=1)
-    dose_mit = dose_mcc("C:/Users/apel04/Desktop/Data_Backup/Messungen/6MeV_FF_complete/PinPointComplete/PROFILES_ONLY/35x35_6MV_both_profiles_dt_0_2mm_s_with_reference.mcc", average_profiles=True, normalize_x_y_on_max=norm_on_max , consider_reference=True)
-    axs[0].plot(dose_mit.position.x, dose_mit.x_profile.norm, lw=1, label="with reference")
-    axs[1].plot(dose_mit.position.y, dose_mit.y_profile.norm, lw=1)
-    axs[0].legend(loc="lower center", fontsize=20)
-
+    #norm_on_max = True
+    #dose_ohne = dose_mcc("C:/Users/apel04/Desktop/Data_Backup/Messungen/6MeV_FF_complete/PinPointComplete/PROFILES_ONLY/35x35_6MV_both_profiles_dt_0_2mm_s_with_reference.mcc", average_profiles=True, normalize_x_y_on_max=norm_on_max )
+    #fig, axs = plt.subplots(1, 2, figsize=(34,17))
+    #axs[0].plot(dose_ohne.position.x, dose_ohne.x_profile.norm, lw=1, label="without reference")
+    #axs[1].plot(dose_ohne.position.y, dose_ohne.y_profile.norm, lw=1)
+    #dose_mit = dose_mcc("C:/Users/apel04/Desktop/Data_Backup/Messungen/6MeV_FF_complete/PinPointComplete/PROFILES_ONLY/35x35_6MV_both_profiles_dt_0_2mm_s_with_reference.mcc", average_profiles=True, normalize_x_y_on_max=norm_on_max , consider_reference=True)
+    #axs[0].plot(dose_mit.position.x, dose_mit.x_profile.norm, lw=1, label="with reference")
+    #axs[1].plot(dose_mit.position.y, dose_mit.y_profile.norm, lw=1)
+    #axs[0].legend(loc="lower center", fontsize=20)
 

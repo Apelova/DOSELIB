@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='doselib',
-    version='1.4',
+    version='1.5',
     author='Marvin Apel aka Apelova',
     url = "https://github.com/Apelova/DOSELIB",
     description='Library to extract Data or freatures from EGSnrc Monte-Carlo Simulation results',
