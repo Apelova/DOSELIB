@@ -29,7 +29,7 @@ class normable_array(np.ndarray):
 
     def __init__(self, arr):
         self.norm = self/max(self)*100    
- 
+        self.error = None
 
 class _mcc_scan:
     def __init__(self, GANTRY_angle, SCAN_curvetype, SCAN_angle, SCAN_depth, DATA):
@@ -475,7 +475,8 @@ class dose_3d(dose_object):
             y_index = self.find_closest_index(self.position.y, Y)
             self.pdd = normable_array(self.dose_matrix[:, y_index, x_index])
             self.pdd_error = self.error_matrix[:, y_index, x_index]
-         
+            self.pdd.error = self.error_matrix[:, y_index, x_index]
+      
             if len(self.pdd) > 1: #when reading multiple 3ddose files this makes sure profile metrics are set correctly
                 self.set_pdd_metrics()
                 
@@ -495,6 +496,7 @@ class dose_3d(dose_object):
             z_index = self.find_closest_index(self.position.z, Z)
             self.x_profile = normable_array(self.dose_matrix[z_index, y_index, :])
             self.x_profile_error = self.error_matrix[z_index, y_index, :]
+            self.x_profile.error = self.error_matrix[z_index, y_index, :]
             self.profile_depth_x = self.position.z[z_index]
             
             if len(self.x_profile) > 1: #when reading multiple 3ddose files this makes sure profile metrics are set correctly
@@ -517,6 +519,7 @@ class dose_3d(dose_object):
             z_index = self.find_closest_index(self.position.z, Z)
             self.y_profile = normable_array(self.dose_matrix[z_index, :, x_index])
             self.y_profile_error = self.error_matrix[z_index, :, x_index]
+            self.y_profile.error = self.error_matrix[z_index, :, x_index]
             self.profile_depth_y = self.position.z[z_index]
             
             if len(self.y_profile) > 1: #when reading multiple 3ddose files this makes sure profile metrics are set correctly
@@ -589,6 +592,7 @@ class dose_3d(dose_object):
             self.position.x = profile.position.x
             self.x_profile = profile.x_profile
             self.x_profile_error = profile.x_profile_error
+            self.x_profile.error = profile.x_profile_error
             self.set_metrics_profile("X")
             if np.array_equal(self.available_depths_x, self.position.z):
                 self.available_depths_x = np.append([], profile.position.z)
@@ -606,6 +610,7 @@ class dose_3d(dose_object):
             self.position.y = profile.position.y
             self.y_profile = profile.y_profile
             self.y_profile_error = profile.y_profile_error
+            self.y_profile.error = profile.y_profile_error
             self.set_metrics_profile("Y")
             
             if np.array_equal(self.available_depths_y, self.position.z): #different definition between single and lonely pdd
@@ -779,6 +784,7 @@ class dose_mcc(dose_object):
                 self.position.z = self.all_scans[i].POSITION
                 self.pdd = self.all_scans[i].DOSE
                 self.pdd_error = self.all_scans[i].ERROR
+                self.pdd.error = self.all_scans[i].ERROR
                 self.set_pdd_metrics()
                 if self.consider_reference: #would be normalized on plateau so just normalize on max here !
                     try:    
@@ -793,6 +799,7 @@ class dose_mcc(dose_object):
                     self.position.x = self.all_scans[i].POSITION
                     self.x_profile = self.all_scans[i].DOSE                  
                     self.x_profile_error = self.all_scans[i].ERROR
+                    self.x_profile.error = self.all_scans[i].ERROR
                     self.set_metrics_profile("X")
                     action = "set"
                     if self.consider_reference: #would be normalized on plateau so just normalize on max here !
@@ -811,6 +818,7 @@ class dose_mcc(dose_object):
                     self.position.y = self.all_scans[i].POSITION
                     self.y_profile = self.all_scans[i].DOSE
                     self.y_profile_error = self.all_scans[i].ERROR
+                    self.y_profile.error = self.all_scans[i].ERROR
                     self.set_metrics_profile("Y")
                     action = "set"
                     if self.consider_reference: #would be normalized on plateau so just normalize on max here !
@@ -863,6 +871,7 @@ class dose_mcc(dose_object):
         self.position.x = self.all_scans[NUMSCAN].POSITION
         self.x_profile = self.all_scans[NUMSCAN].DOSE
         self.x_profile_error = self.all_scans[NUMSCAN].ERROR
+        self.x_profile.error = self.all_scans[NUMSCAN].ERROR
         self.set_metrics_profile("X")
         if not MUTE:
             print(f"Successfully set X-Profile at depth Z={float(self.all_scans[NUMSCAN].SCAN_DEPTH)/10}cm!")
@@ -879,6 +888,7 @@ class dose_mcc(dose_object):
         self.position.y = self.all_scans[NUMSCAN].POSITION
         self.y_profile = self.all_scans[NUMSCAN].DOSE
         self.y_profile_error = self.all_scans[NUMSCAN].ERROR
+        self.y_profile.error = self.all_scans[NUMSCAN].ERROR
         self.set_metrics_profile("Y")
         if not MUTE:
             print(f"Successfully set Y-Profile at depth Z={float(self.all_scans[NUMSCAN].SCAN_DEPTH)/10}cm!")
@@ -1163,7 +1173,7 @@ def set_metrics(dose_objs, plot_axs, axes=["Z", "X", "Y"], difference=True, excl
 
 
 def compare_dose( dose_objects, labels=None, axes=["Z", "X", "Y"], difference=True, figsize=None, metrics=False, exclude= {}, colors = ["black", "red", "blue"], 
-                  interpol="linear", diff_dx=0.1, scatter_first=True, show_labels=False, labels_loc="upper right", label_size=15, norm_on_max=False):
+                  interpol="linear", diff_dx=0.1, scatter_first=True, show_labels=False, labels_loc="upper right", label_size=15, norm_on_max=False, plot_raw=False):
     """
         A function that return plot of selected axes.
         The limits can be set by calling the output !
@@ -1231,19 +1241,26 @@ def compare_dose( dose_objects, labels=None, axes=["Z", "X", "Y"], difference=Tr
 
 
     #--- define helping functions !
-    def plot_difference(fig_, axs_, position_dose_pair_arrays, labels, metrics=None, colors = ["black", "red", "blue"], difference=True):
+    def plot_difference(fig_, axs_, position_dose_pair_arrays, labels, metrics=None, colors = ["black", "red", "blue"], difference=True, plot_raw=False):
         #--- group positions and pairs together and interpolate dose on a common grid !
         common_position, interpolated_dose = interpolate_arrays( [pair[0] for pair in position_dose_pair_arrays], [pair[1] for pair in position_dose_pair_arrays])
         #--- iterate through all the AXIS to plot !
-        for i in range(1, len(interpolated_dose)):
-            if len(axes)==1:
-                axs_[1].plot(common_position, interpolated_dose[i]-interpolated_dose[0], c=colors[i], lw=2)
-            else:
-                axs_[1,col].plot(common_position, interpolated_dose[i]-interpolated_dose[0], c=colors[i], lw=2)
+        if plot_raw:
+            for i in range(1, len(interpolated_dose)):
+                if len(axes)==1:
+                    axs_[1].plot(common_position, (interpolated_dose[i]-interpolated_dose[0])/interpolated_dose[0]*100, c=colors[i], lw=2)
+                else:
+                    axs_[1,col].plot(common_position, (interpolated_dose[i]-interpolated_dose[0])/interpolated_dose[0]*100, c=colors[i], lw=2)            
+        else:
+            for i in range(1, len(interpolated_dose)):
+                if len(axes)==1:
+                    axs_[1].plot(common_position, (interpolated_dose[i]-interpolated_dose[0])/interpolated_dose[0]*100, c=colors[i], lw=2)
+                else:
+                    axs_[1,col].plot(common_position, (interpolated_dose[i]-interpolated_dose[0])/interpolated_dose[0]*100, c=colors[i], lw=2)
             
         
     #--- define helping functions !
-    def plot_dose_distribution(fig_, axs_, position_dose_pair_arrays, labels, metrics=None, colors = ["black", "red", "blue"], difference=True,scatter_first=True):
+    def plot_dose_distribution(fig_, axs_, position_dose_pair_arrays, labels, metrics=None, colors = ["black", "red", "blue"], difference=True,scatter_first=True, plot_raw=False):
         #--- for each plot of the pairs 
         for i, pair in enumerate(position_dose_pair_arrays):
             # the first one is the reference -> make it appear different!
@@ -1283,27 +1300,40 @@ def compare_dose( dose_objects, labels=None, axes=["Z", "X", "Y"], difference=Tr
                     axs_.legend(loc=labels_loc, fontsize=label_size)
 
         if difference:
-            plot_difference(fig_, axs_, position_dose_pair_arrays, labels, metrics, colors)
+            plot_difference(fig_, axs_, position_dose_pair_arrays, labels, metrics, colors, plot_raw=plot_raw)
 
-    for col in range(cols):
-        #--- print original plots
-        if axes[col] == "X":
-            if norm_on_max:
-                plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile/max(each.x_profile)*100] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
-            else:                
-                plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
-
-        if axes[col] == "Y":
-            if norm_on_max:
-                plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile/max(each.y_profile)*100] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
-            else:
-                plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+    if plot_raw:
+        for col in range(cols):
+            #--- print original plots
+            if axes[col] == "X":
+                plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first, plot_raw=True)
     
-        if axes[col] == "Z":
-            if norm_on_max:
-                plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd/max(each.pdd)*100] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
-            else:
-                plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+            if axes[col] == "Y":
+                plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first, plot_raw=True)
+        
+            if axes[col] == "Z":
+                plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first, plot_raw=True)        
+
+    else:
+        for col in range(cols):
+            #--- print original plots
+            if axes[col] == "X":
+                if norm_on_max:
+                    plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile/max(each.x_profile)*100] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+                else:                
+                    plot_dose_distribution(fig_, axs_, [[each.position.x, each.x_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+    
+            if axes[col] == "Y":
+                if norm_on_max:
+                    plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile/max(each.y_profile)*100] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+                else:
+                    plot_dose_distribution(fig_, axs_, [[each.position.y, each.y_profile.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+        
+            if axes[col] == "Z":
+                if norm_on_max:
+                    plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd/max(each.pdd)*100] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
+                else:
+                    plot_dose_distribution(fig_, axs_, [[each.position.z, each.pdd.norm] for each in dose_objects], labels, difference=difference, colors=colors, scatter_first=scatter_first)
 
 
     #--- add x-labels
@@ -1536,16 +1566,19 @@ class dose_chamber_log(dose_object):
             self.position.x = np.array(pos)
             self.x_profile = normable_array(dose)
             self.x_profile_error = np.array(error)
+            self.x_profile.error = np.array(error)
             self.set_metrics_profile("X")
         elif axis=="y":
             self.position.y = np.array(pos)
             self.y_profile = normable_array(dose)
             self.y_profile_error = np.array(error)
+            self.y_profile.error = np.array(error)
             self.set_metrics_profile("Y")
         else:
             self.position.z = np.array(pos)
             self.pdd = normable_array(dose)
             self.pdd_error = np.array(error)
+            self.pdd.error = np.array(error)
             self.set_pdd_metrics()
  
     def remove_value(self, axis, position):
@@ -1556,6 +1589,7 @@ class dose_chamber_log(dose_object):
             self.position.z = np.delete(self.position.z, ix) 
             self.pdd = normable_array(np.delete(self.pdd, ix)) #rescale pdd.norm ! 
             self.pdd_error = np.delete(self.pdd_error, ix) 
+            self.pdd.error = np.delete(self.pdd.error, ix) 
             self.set_pdd_metrics()
         
         if axis.upper() == "X":
@@ -1564,6 +1598,7 @@ class dose_chamber_log(dose_object):
             self.position.x = np.delete(self.position.x, ix) 
             self.x_profile = normable_array(np.delete(self.x_profile, ix)) #rescale pdd.norm ! 
             self.x_profile_error = np.delete(self.x_profile_error, ix) 
+            self.x_profile.error = np.delete(self.x_profile.error, ix) 
             self.set_metrics_profile("X")
             
         if axis.upper() == "Y":
@@ -1572,6 +1607,7 @@ class dose_chamber_log(dose_object):
             self.position.y = np.delete(self.position.y, ix) 
             self.y_profile = normable_array(np.delete(self.y_profile, ix)) #rescale pdd.norm ! 
             self.y_profile_error = np.delete(self.y_profile_error, ix) 
+            self.y_profile.error = np.delete(self.y_profile.error, ix) 
             self.set_metrics_profile("Y")
             
 
@@ -1617,18 +1653,69 @@ def plot_chamber_sim(path, err_lim=10, label=None):
     if label:
         fig.suptitle(label, fontsize=25)
 
+def plot_dose_with_gamma(dose_exp, dose_sim, axes, dx=0.3, dD=3, CUTOFF=20):
+    color_exp   = "#3e423f"
+    color_sim   = "#317fde"
+    color_gamma = "#de3131"
+    
+    fig, axs = plt.subplots(1,1, figsize=(12,8), dpi=100)
+    #--- make the gamma_index scale 
+    ax_gamma = axs.twinx()  # instantiate a second Axes that shares the same x-axis    
+    ax_gamma.set_ylabel(f'γ({axes.lower()})', color=color_gamma, fontsize=20)  # we already handled the x-label with ax1
+    ax_gamma.tick_params(axis="y", labelcolor=color_gamma)
+    ax_gamma.set_ylim(0, 5)
+    axs.grid(False)
+    ax_gamma.grid(False)
+    ax_gamma.plot([-100, 100], [1,1], c=color_gamma, ls="dashed")
+    min_x, max_x = 0, 0
+    if axes.upper()=="X":
+        axs.scatter(dose_exp.position.x, dose_exp.x_profile.norm, color=color_exp, s=50, label="Experimental")
+        axs.plot(dose_sim.position.x, dose_sim.x_profile.norm, color=color_sim, lw=3, label="Simulated")
+        gamma_x =gamma(
+                        axes_reference = dose_exp.position.x, dose_reference  = dose_exp.x_profile.norm, 
+                        axes_evaluation= dose_sim.position.x, dose_evaluation = dose_sim.x_profile.norm, 
+                        dD=dD, dx=dx, CUTOFF=CUTOFF) #3% und 3mm
 
+        ax_gamma.plot(dose_exp.position.x, gamma_x, c=color_gamma, lw=3)
+        Gamma_PR_X = round(len(gamma_x[gamma_x<1])/len(gamma_x)*100,2)
+        fig.suptitle(f"γ(x) Passing Rate = {Gamma_PR_X}%", font="monospace", fontsize=20, y=0.925)
+        min_x, max_x = min(dose_exp.position.x), max(dose_exp.position.x)
 
+        
 
-if __name__ == "__main__":
-    """ Example of the newest feature reading in .mcc-Data-Files !"""
-    #norm_on_max = True
-    #dose_ohne = dose_mcc("C:/Users/apel04/Desktop/Data_Backup/Messungen/6MeV_FF_complete/PinPointComplete/PROFILES_ONLY/35x35_6MV_both_profiles_dt_0_2mm_s_with_reference.mcc", average_profiles=True, normalize_x_y_on_max=norm_on_max )
-    #fig, axs = plt.subplots(1, 2, figsize=(34,17))
-    #axs[0].plot(dose_ohne.position.x, dose_ohne.x_profile.norm, lw=1, label="without reference")
-    #axs[1].plot(dose_ohne.position.y, dose_ohne.y_profile.norm, lw=1)
-    #dose_mit = dose_mcc("C:/Users/apel04/Desktop/Data_Backup/Messungen/6MeV_FF_complete/PinPointComplete/PROFILES_ONLY/35x35_6MV_both_profiles_dt_0_2mm_s_with_reference.mcc", average_profiles=True, normalize_x_y_on_max=norm_on_max , consider_reference=True)
-    #axs[0].plot(dose_mit.position.x, dose_mit.x_profile.norm, lw=1, label="with reference")
-    #axs[1].plot(dose_mit.position.y, dose_mit.y_profile.norm, lw=1)
-    #axs[0].legend(loc="lower center", fontsize=20)
+    elif axes.upper()=="Y":
+        axs.scatter(dose_exp.position.y, dose_exp.y_profile.norm, color=color_exp, s=50, label="Experimental")
+        axs.plot(dose_sim.position.y, dose_sim.y_profile.norm, color=color_sim, lw=3, label="Simulated")
+        gamma_y =gamma(
+                        axes_reference = dose_exp.position.y, dose_reference  = dose_exp.y_profile.norm, 
+                        axes_evaluation= dose_sim.position.y, dose_evaluation = dose_sim.y_profile.norm, 
+                        dD=dD, dx=dx, CUTOFF=CUTOFF) #3% und 3mm
 
+        ax_gamma.plot(dose_exp.position.y, gamma_y, c=color_gamma, lw=3)
+        Gamma_PR_Y = round(len(gamma_y[gamma_y<1])/len(gamma_y)*100,2)
+        fig.suptitle(f"γ(y) Passing Rate = {Gamma_PR_Y}%", font="monospace", fontsize=20, y=0.925)
+        min_x, max_x = min(dose_exp.position.y), max(dose_exp.position.y)
+
+    if axes.upper()=="Z":
+        axs.scatter(dose_exp.position.z, dose_exp.pdd.norm, color=color_exp, s=50, label="Experimental")
+        axs.plot(dose_sim.position.z,    dose_sim.pdd.norm, color=color_sim, lw=3, label="Simulated")
+        gamma_z =gamma(
+                        axes_reference = dose_exp.position.z, dose_reference  = dose_exp.pdd.norm, 
+                        axes_evaluation= dose_sim.position.z, dose_evaluation = dose_sim.pdd.norm, 
+                        dD=dD, dx=dx, CUTOFF=CUTOFF) #3% und 3mm
+
+        ax_gamma.plot(dose_exp.position.z, gamma_z, c=color_gamma, lw=3)
+        Gamma_PR_Z = round(len(gamma_z[gamma_z<1])/len(gamma_z)*100,2)
+        fig.suptitle(f"γ(z) Passing Rate = {Gamma_PR_Z}%", font="monospace", fontsize=20, y=0.925)
+        min_x, max_x = 0, 0
+        min_x, max_x = min(dose_exp.position.z), max(dose_exp.position.z)
+        
+    #--- fix labels so you dont see the dashed line
+    axs.set_xlim(min_x, max_x)
+    #--- labels and other cosmetics
+    axs.set_xlabel(f"Position along {axes}-Axis [cm]", fontsize=15)
+    axs.set_ylabel(f"relative Dose [%]", fontsize=15)
+    #---
+    axs.legend(loc="best", fontsize=12)
+    
+    return fig, axs 
