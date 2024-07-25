@@ -108,6 +108,13 @@ class dose_object:
         self.HW_y= np.nan
         self.S_y= np.nan
         self.dCAX_y= np.nan
+        #--- auxilarry variables (private) used in self.adapt_to()
+        self.__x_interpol_function_raw   = None
+        self.__x_interpol_function_error = None
+        self.__y_interpol_function_raw   = None
+        self.__y_interpol_function_error = None
+        self.__z_interpol_function_raw   = None
+        self.__z_interpol_function_error = None
         
     def norm_plateau(self):
         if self.x_profile is not None:
@@ -314,7 +321,53 @@ class dose_object:
            self.dCAX_y = self.HW_y[0] + (self.HW_y[1] - self.HW_y[0])/2
     
     
+    def adapt_to(self, other):
+        print(str(type(other)))
+        if "dose" not in str(type(other)):
+            raise ValueError("--- Warning ---  the Input for the argument other does not correspond to a dose object !")
+        
+        #--- interpolate all arrays        
+        if len(self.position.x) != 0:
+            self.__x_interpol_function_raw    = interpolate.interp1d(x=self.position.x, y=self.x_profile      , kind="linear", fill_value='extrapolate')
+            self.__x_interpol_function_error  = interpolate.interp1d(x=self.position.x, y=self.x_profile.error, kind="linear", fill_value='extrapolate')
+            self.__interpol_adapt_to(other, "X")
+            
+        if len(self.position.y) != 0:
+            self.__y_interpol_function_raw    = interpolate.interp1d(x=self.position.y, y=self.y_profile      , kind="linear", fill_value='extrapolate')
+            self.__y_interpol_function_error  = interpolate.interp1d(x=self.position.y, y=self.y_profile.error, kind="linear", fill_value='extrapolate')
+            self.__interpol_adapt_to(other, "Y")
+        
+        if len(self.position.z) != 0:
+            self.__z_interpol_function_raw    = interpolate.interp1d(x=self.position.z, y=self.pdd      , kind="linear", fill_value='extrapolate')
+            self.__z_interpol_function_error  = interpolate.interp1d(x=self.position.z, y=self.pdd.error, kind="linear", fill_value='extrapolate')
+            self.__interpol_adapt_to(other, "Z")
+
     
+    def __interpol_adapt_to(self, other, axis):
+        if axis=="X":
+            self.position.x = other.position.x
+            self.x_profile      = normable_array(self.__x_interpol_function_raw(other.position.x))
+            self.x_profile.error= self.__x_interpol_function_error(other.position.x)
+            #--- resest to save save storage
+            self.__x_interpol_function_raw   = None
+            self.__x_interpol_function_error = None
+        if axis=="Y":
+            self.position.y = other.position.y
+            self.y_profile      = normable_array(self.__y_interpol_function_raw(other.position.y))
+            self.y_profile.error= self.__y_interpol_function_error(other.position.y)
+            #--- resest to save save storage
+            self.__y_interpol_function_raw   = None
+            self.__y_interpol_function_error = None
+        if axis=="Z":
+            self.position.z = other.position.z
+            self.pdd      = normable_array(self.__z_interpol_function_raw(other.position.z))
+            self.pdd.error= self.__z_interpol_function_error(other.position.z)
+            #--- resest to save save storage
+            self.__z_interpol_function_raw   = None
+            self.__z_interpol_function_error = None
+            
+
+
 class dose_3d(dose_object):
     """
         A class that enables one to read .3ddose-Files with python and read certain profiles or arbitrary voxels.
@@ -1473,6 +1526,8 @@ class dose_chamber_log(dose_object):
             #--- normalize X/Y Profiles on start
             if not self.normed_on_max:
                  self.norm_plateau()
+                 
+            self.correct_errors()
             #--- output information on read
             if INFO:
                 print(self)
@@ -1589,7 +1644,7 @@ class dose_chamber_log(dose_object):
             self.position.z = np.delete(self.position.z, ix) 
             self.pdd = normable_array(np.delete(self.pdd, ix)) #rescale pdd.norm ! 
             self.pdd_error = np.delete(self.pdd_error, ix) 
-            self.pdd.error = np.delete(self.pdd.error, ix) 
+            self.pdd.error = self.pdd_error
             self.set_pdd_metrics()
         
         if axis.upper() == "X":
@@ -1598,7 +1653,7 @@ class dose_chamber_log(dose_object):
             self.position.x = np.delete(self.position.x, ix) 
             self.x_profile = normable_array(np.delete(self.x_profile, ix)) #rescale pdd.norm ! 
             self.x_profile_error = np.delete(self.x_profile_error, ix) 
-            self.x_profile.error = np.delete(self.x_profile.error, ix) 
+            self.x_profile.error = self.x_profile_error
             self.set_metrics_profile("X")
             
         if axis.upper() == "Y":
@@ -1607,10 +1662,23 @@ class dose_chamber_log(dose_object):
             self.position.y = np.delete(self.position.y, ix) 
             self.y_profile = normable_array(np.delete(self.y_profile, ix)) #rescale pdd.norm ! 
             self.y_profile_error = np.delete(self.y_profile_error, ix) 
-            self.y_profile.error = np.delete(self.y_profile.error, ix) 
+            self.y_profile.error = self.y_profile_error
             self.set_metrics_profile("Y")
             
+    def correct_errors(self):
+        if (self.x_profile_error is not None):
+            self.x_profile_error /= 100
+            self.x_profile.error = self.x_profile_error
 
+        if (self.y_profile_error is  not None):
+            self.y_profile_error /= 100
+            self.y_profile.error = self.y_profile_error
+
+        if (self.pdd_error is  not None):
+            self.pdd_error /= 100
+            self.pdd.error = self.pdd_error
+
+        
 def plot_chamber_sim(path, err_lim=10, label=None):
     #-- read file
     with open(path) as file:
@@ -1719,3 +1787,6 @@ def plot_dose_with_gamma(dose_exp, dose_sim, axes, dx=0.3, dD=3, CUTOFF=20):
     axs.legend(loc="best", fontsize=12)
     
     return fig, axs 
+
+if __name__ == "__main__":
+    pass
